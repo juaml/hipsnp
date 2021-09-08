@@ -1,7 +1,7 @@
 [run]
 branch = True
-source = <PKG_NAME>
-include = */<PKG_NAME>/*
+source = hipsnp
+include = */hipsnp/*
 omit =
     */setup.py
     */tests/*

@@ -7,14 +7,14 @@ with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 
-DOWNLOAD_URL = '<GITHUB_URL>'
-URL = '<DOC_URL>'
+DOWNLOAD_URL = 'https://github.com/oportoles/hispnp/'
+URL = 'http://oportoles.github.io/hipspn/'
 
 setuptools.setup(
-    name='<PKG_NAME>',
-    author='<AUTHOR_NAME>',
-    author_email='<AUTHOR_EMAIL>',
-    description='<SHORT_DESC>',
+    name='hipsnp',
+    author='Kaustubh Patil',
+    author_email='k.patil@fz-juelich.de',
+    description='FZJ AML hipsnp library',
     long_description=long_description,
     long_description_content_type='text/markdown',
     url=URL,
@@ -37,12 +37,12 @@ setuptools.setup(
         'Source': DOWNLOAD_URL,
         'Tracker': f'{DOWNLOAD_URL}issues/',
     },
-    install_requires=[],  # TODO: Complete
+    install_requires=['datalad', 'pandas'],  # TODO: Complete
     python_requires='>=3.6',
     use_scm_version=dict(
         version_scheme="python-simplified-semver",
         local_scheme="node-and-date",
-        write_to="<PKG_NAME>/_version.py",
+        write_to="hipsnp/_version.py",
         write_to_template="__version__ = '{version}'\n"
     ),
     setup_requires=['setuptools_scm'],
