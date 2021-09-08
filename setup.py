@@ -37,7 +37,7 @@ setuptools.setup(
         'Source': DOWNLOAD_URL,
         'Tracker': f'{DOWNLOAD_URL}issues/',
     },
-    install_requires=['datalad', 'pandas'],  # TODO: Complete
+    install_requires=['numpy','datalad', 'pandas'],  # TODO: Complete
     python_requires='>=3.6',
     use_scm_version=dict(
         version_scheme="python-simplified-semver",
