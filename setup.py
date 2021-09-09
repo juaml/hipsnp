@@ -1,4 +1,4 @@
-# Authors: Federico Raimondo <f.raimondo@fz-juelich.de>
+i# Authors: Federico Raimondo <f.raimondo@fz-juelich.de>
 #          Sami Hamdan <s.hamdan@fz-juelich.de>
 # License: AGPL
 import setuptools
@@ -7,8 +7,8 @@ with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 
-DOWNLOAD_URL = 'https://github.com/oportoles/hispnp/'
-URL = 'http://oportoles.github.io/hipspn/'
+DOWNLOAD_URL = 'https://github.com/oportoles/hipsnp/'
+URL = 'http://oportoles.github.io/hipsnp/'
 
 setuptools.setup(
     name='hipsnp',
