@@ -22,7 +22,7 @@ def ensembl_human_rsid(rsid):
     
     url = 'http://rest.ensembl.org/variation/human/' + rsid + '?content-type=application/json'
     response = requests.get(url)
-    return response
+    return response ## returns a request.Response object, not a JSON object
 
 
 def datalad_get_chromosome(c,
