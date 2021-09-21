@@ -7,7 +7,7 @@ import requests
 import pandas as pd
 import numpy as np
 from datalad import api as datalad
-from alive_progress import alive_it
+import alive_progress
 
 def ensembl_human_rsid(rsid):
     """
@@ -300,7 +300,7 @@ def vcf2genotype(vcf, th=0.9, snps=None, samples=None):
     for snp in snps_index:
         REF = vcf['REF'][snp]
         ALT = vcf['ALT'][snp]
-        for sam in alive_it(samples):
+        for sam in alive_progress.alive_it(samples):
             try:
                 GP = vcf[sam][snp]
                 GP = [float(x) for x in GP.split(',')]
@@ -361,7 +361,7 @@ def vcf2prs(vcf_files, weight_file, samples=None, outfile=None):
     # read all the vcf_files
     print('reading ' + str(len(vcf_files)) + ' vcf files... ')
     vcf = pd.DataFrame()
-    for vf in alive_it(vcf_files):
+    for vf in alive_progress.alive_it(vcf_files):
         vcf = vcf.append(read_vcf(vf))
     # qctool vcf file ID conrains rsID,loc_info
     # convert to rsID and set it as index to later use
@@ -388,7 +388,7 @@ def vcf2prs(vcf_files, weight_file, samples=None, outfile=None):
         assert isinstance(EA, str)
         weightSNP = weights['weight'][weights[rsidcol] == snp].values[0]
         assert isinstance(weightSNP, float)
-        for sam in alive_it(samples):
+        for sam in alive_progress.alive_it(samples):
             try:
                 GP = vcf[sam][snp]
                 GP = [float(x) for x in GP.split(',')]
