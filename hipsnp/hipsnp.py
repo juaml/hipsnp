@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from datalad import api as datalad
 import alive_progress
+from pathlib import Path
 
 def ensembl_human_rsid(rsid):
     """
@@ -41,10 +42,14 @@ def datalad_get_chromosome(c,
         source="ria+http://ukb.ds.inm7.de#~genetic"
 
     if path is None or path == '':
-        path = os.path.join('/tmp', 'genetic')
+        pathOS = os.path.join('/tmp', 'genetic')
+        path = Path('/tmp/genetic')
+        print('t1:', pathOS == path)
 
     ds = datalad.clone(source=source, path=path)
-    files = glob.glob(os.path.join(ds.path, imputationdir, '*_c' + str(c) + '_*'))
+    filesOS = glob.glob(os.path.join(ds.path, imputationdir, '*_c' + str(c) + '_*'))
+    files = list(Path(ds.path).joinpath(imputationdir).glob('*_c' + str(c) + '_*'))
+    print('t2:', filesOS == files)
     getout = ds.get(files)
     return files, ds, getout
 
@@ -56,7 +61,9 @@ def rsid2chromosome(rsids, chromosomes=None):
     chromosomes: list of chromosomes, string or list of strings
     returns: dataframe with columns 'rsids' and 'chromosomes'
     """
-    if isinstance(rsids, str) and os.path.isfile(rsids):
+    # if isinstance(rsids, str) and os.path.isfile(rsids):
+    if isinstance(rsids, str) and Path(rsids).is_file():
+        print('t3:', all([os.path.isfile(rsids), Path(rsids).is_file()]))
         rsids = pd.read_csv(rsids, header=None, sep='\t')
         if rsids.shape[1] > 1:
             chromosomes = list(rsids.iloc[:,1])
@@ -112,14 +119,21 @@ def rsid2vcf(rsids, outdir,
     if qctool is None:
         qctool = shutil.which('qctool')
 
-    if qctool is None or os.path.isfile(qctool) is False:
+    # if qctool is None or os.path.isfile(qctool) is False:
+    if qctool is None or Path(qctool).is_file() is False:
+        print('t4:', all([os.path.isfile(qctool), Path(qctool).is_file()]))
         print('qctool is not available')
         raise
 
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+    # if not os.path.exists(outdir):
+    if not Path(outdir).exists():
+        print('t5: ', not all([os.path.exists(outdir), Path(outdir).exists()]))
+        # os.makedirs(outdir)
+        Path(outdir).mkdir()
 
-    if force is True and os.listdir(outdir):
+    print('t6: ',  all([os.listdir(outdir), list(Path(outdir).iterdir())] ))
+    # if force is True and os.listdir(outdir):
+    if force is True and list(Path(outdir).iterdir()):
         print('the output directory must be empty')
         raise
 
@@ -138,8 +152,10 @@ def rsid2vcf(rsids, outdir,
         if chromosomes_use is not None and ch not in chromosomes_use:
             print ('skipping chromosome ' + str(ch), ' not in the use list')
             continue
-        file_vcf = os.path.join(outdir, 'chromosome' + str(ch) + '.vcf')
-        if force is False and os.path.isfile(file_vcf):
+        # file_vcf = os.path.join(outdir, 'chromosome' + str(ch) + '.vcf')
+        file_vcf = Path(outdir, 'chromosome' + str(ch) + '.vcf')
+        # if force is False and os.path.isfile(file_vcf):
+        if force is False and file_vcf.is_file():
             print('chromosome ' + str(ch) + ' output file exists, skipping: ' + str(file_vcf))
             continue
 
@@ -168,7 +184,8 @@ def rsid2vcf(rsids, outdir,
         file_bgen = None
         file_sample = None
         for fl in files:
-            name, ext = os.path.splitext(fl)
+            #name, ext = os.path.splitext(fl)
+            name, ext = Path(fl).stem, Path(fl).suffix
             if ext == '.bgen':
                 assert file_bgen is None
                 file_bgen = fl
@@ -177,7 +194,8 @@ def rsid2vcf(rsids, outdir,
                 file_sample = fl
 
         assert file_bgen is not None and file_sample is not None
-        file_rsids = os.path.join(outdir, 'rsids_chromosome' + str(ch) + '.txt')
+        # file_rsids = os.path.join(outdir, 'rsids_chromosome' + str(ch) + '.txt')
+        file_rsids = Path(outdir, 'rsids_chromosome' + str(ch) + '.txt')
         df = pd.DataFrame(rs_ch)
         df.to_csv(file_rsids, index=False, header=False)
         
@@ -213,12 +231,15 @@ def rsid2vcf_multiple(rsid_files, outdir,
     ch_rs   = [None] * len(rsid_files)
     for i in range(len(rsid_files)):
         print('rsid_file ' + str(i) + ': ' + str(rsid_files[i]))
-        if os.path.isfile(rsid_files[i]) is False:
+        # if os.path.isfile(rsid_files[i]) is False: 
+        if Path(rsid_files[i]).is_file() is False:
             print('file ' + str(rsid_files[i]) + ' does not exist')
             raise
-        bname = os.path.basename(rsid_files[i])
-        bname = os.path.splitext(bname)[0]
-        outdirs[i] = os.path.join(outdir, bname)
+        # bname = os.path.basename(rsid_files[i])
+        # bname = os.path.splitext(bname)[0]
+        bname = Path(rsid_files[i]).name
+        # outdirs[i] = os.path.join(outdir, bname)
+        outdirs[i] = Path(outdir, bname)
         ch_rs[i] = rsid2chromosome(rsid_files[i])
         print(ch_rs[i].head())
         uchromosomes = pd.unique(ch_rs[i]['chromosomes'])
@@ -264,7 +285,8 @@ def vcf2genotype(vcf, th=0.9, snps=None, samples=None):
     given a vcf file path or a pandas df from read_vcf returns genotypes
     """
     if isinstance(vcf ,str):
-        assert os.path.isfile(vcf)
+        # assert os.path.isfile(vcf)
+        assert Path(vcf).is_file()
         print('reading vcf file: ' + vcf)
         vcf = read_vcf(vcf)
     elif isinstance(vcf, pd.DataFrame):
@@ -334,11 +356,15 @@ def vcf2prs(vcf_files, weight_file, samples=None, outfile=None):
     outfile: file to write the output, str (default: None, which means no file written)
     returns: polygenic risk score for each sample, pandas df
     """
-    assert os.path.isfile(weight_file)
+    # assert os.path.isfile(weight_file)
+    assert Path(weight_file).is_file()
 
-    if not isinstance(vcf_files, list) and os.path.isdir(vcf_files):
-        vcf_files = glob.glob(vcf_files + '/*.vcf')
-    
+    # if not isinstance(vcf_files, list) and os.path.isdir(vcf_files):
+    if not isinstance(vcf_files, list) and Path(vcf_files).is_dir():
+        vcf_filesG = glob.glob(vcf_files + '/*.vcf')
+        vcf_files = list(Path(vcf_files).glob('*.vcf'))
+        print('t6: ', vcf_filesG == vcf_files)        
+
     assert isinstance(vcf_files, list)
     assert len(vcf_files) > 0
 
