@@ -4,7 +4,7 @@ import hipsnp as hps
 import json
 import pandas as pd
 import datalad.api as dl
-
+from pathlib import Path, PosixPath
 
 mock_rsid = 'rs699'
 
@@ -46,7 +46,7 @@ def test_rsid2chromosome_has_RSIDandCROMOSOM():
 
 
 def test_rsid2chromosome_has_list_of_RSIDandCROMOSOM():
-    mock_rsid = ['rs699', 'rs698']
+    mock_rsid = ['rs699', 'rs698', 'rs101']
     refColFields = ['rsids','chromosomes']
     outPANDAS = hps.rsid2chromosome(mock_rsid)
 
@@ -60,7 +60,7 @@ def test_datalad_get_chromosome_return_DataladType():
     c = '1'
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen' # exmaple data on GIN
     
-    _,dataladObject,_ = hps.datalad_get_chromosome(c=1,source=source)
+    _,dataladObject,_ = hps.datalad_get_chromosome(c=c,source=source)
     assert type(dataladObject) == dl.Dataset
     removeDATALADdataset(dataladObject)
 
@@ -75,21 +75,53 @@ def test_datalad_get_chromosome_dataland_get():
     c = '1'
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen' # exmaple data on GIN
 
-    _,dataladObject,dataGet = hps.datalad_get_chromosome(c=1,source=source)
+    _,dataladObject,dataGet = hps.datalad_get_chromosome(c=c,source=source)
     assert validateNameObtainedFiles(dataGet)
     removeDATALADdataset(dataladObject)
 
-@pytest.mark.parametrize("rsids, qctool",
-                        [('101', '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'),
-                        ('101', None),
-                        ('101', '/home/oportoles/Apps'),
-                        ('101', '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64')])
-def test_rsid2vcf_qctool(rsids, qctool):
-# def test_rsid2vcf_qctool():
+def test_datalad_get_chromosome_file_paths():
+    """ returns the path to the files installed by DL """
+    c = '1'
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen' # exmaple data on GIN
+    filesRef = [Path('/home/oportoles/Documents/MyCode/hipsnp/test_data/imputation/example_c1_v0.bgen'),
+                Path('/home/oportoles/Documents/MyCode/hipsnp/test_data/imputation/example_c1_v0.sample')]
+    # outdir = '/home/oportoles/Documents/MyCode/hipsnp/test_data'
+    outdir = Path('/home/oportoles/Documents/MyCode/hipsnp/test_data')
+    files,dataladObject,_ = hps.datalad_get_chromosome(c=c,source=source,path=outdir)
+    assert sorted(files) == sorted(filesRef)
+    removeDATALADdataset(dataladObject)
+
+
+def test_get_chromosome_from_RSIDs():
+    """get chromosom from user given RSID, chek return datalad dataset and paths to data"""
+    datalad_source = 'git@gin.g-node.org:/juaml/datalad-example-bgen' # exmaple data on GIN
+    rsids = 'rs101'
+    ### copied from rsid2vcf
+    ch_rs = hps.rsid2chromosome(rsids, chromosomes=None)
+    chromosomes = ch_rs['chromosomes'].tolist()
+    uchromosomes = pd.unique(chromosomes)
+    print('chromosomes needed: ' + str(uchromosomes) + '\n')
+    files, ds, getout = [None]*len(uchromosomes), [None]*len(uchromosomes), [None]*len(uchromosomes)
+    for c in range(len(uchromosomes)):
+        ch = uchromosomes[c]
+        files[c], ds[c], getout[c] = hps.datalad_get_chromosome(ch, source=datalad_source, path=None)
+    ###
+    filesOK = all([f == str or f == PosixPath for f in files])
+    dsOK = all([type(d) == dl.Dataset for d in ds])
+    assert filesOK and dsOK
+
+# @pytest.mark.parametrize("qctool",
+#                         [('/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'),
+#                          ('/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/'),
+#                          ('qctool')])
+# def test_rsid2vcf_qctool(qctool):
+def test_rsid2vcf():
     """ finds and uses qctool"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen' # exmaple data on GIN
     outdir = '/home/oportoles/Documents/MyCode/hipsnp/test_data'
-    rsids = 'rs101'
+    rsids = ['rs101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
 
     # qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64'
     
@@ -105,12 +137,10 @@ def test_rsid2vcf_qctool(rsids, qctool):
                                     datalad_drop_if_got=True,
                                     datalad_dir=None,
                                     force=False,
-                                    chromosomes=None,
+                                    chromosomes=chromosomes,
                                     chromosomes_use=None)
     
     assert type(dataL) == dl.Dataset 
     removeDATALADdataset(dataL)
-
-
 
 

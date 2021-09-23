@@ -199,8 +199,8 @@ def rsid2vcf(rsids, outdir,
         df = pd.DataFrame(rs_ch)
         df.to_csv(file_rsids, index=False, header=False)
         
-        cmd = qctool + ' -g ' + file_bgen + ' -s ' + file_sample \
-              + ' -incl-rsids ' + file_rsids  + ' -og ' + file_vcf
+        cmd = qctool + ' -g ' + str(file_bgen) + ' -s ' + str(file_sample) \
+              + ' -incl-rsids ' + str(file_rsids)  + ' -og ' + str(file_vcf)
         print('running qctool: ' + cmd  + '\n')
         os.system(cmd)
 

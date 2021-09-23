@@ -1,8 +1,20 @@
 #import ..hipsnp as hps
-print('__file__={0:<35} | __name__={1:<25} | __package__={2:<25}'.format(__file__,__name__,str(__package__)))
 import hipsnp
 import pandas as pd
 import datalad.api as dl
+
+
+
+def get_series_of_chromosome_from_RSIDs():
+    """get chromosom from user given RSID"""
+    rsids = ['rs101', 'rs102', 'rs103', 'rs1', 'rs2','rs3']
+    rsids = ['rs_2','rs_3']
+    ### copied from rsid2vcf
+    for rsid in rsids:
+        ch_rs = hipsnp.rsid2chromosome(rsid, chromosomes=None)
+        chromosomes = ch_rs['chromosomes'].tolist()
+        uchromosomes = pd.unique(chromosomes)
+        print('chromosomes needed: ' + str(uchromosomes) + '\n')
 
 def test_datalad_get_chromosome_return_DataladType():
     """Read example data from GIN, assert returnst datalad object"""
@@ -14,4 +26,5 @@ def test_datalad_get_chromosome_return_DataladType():
     print(type(dataladObject) == dl.Dataset)
 
 if __name__ == "__main__":
-    test_datalad_get_chromosome_return_DataladType()
+    # test_datalad_get_chromosome_return_DataladType()
+    get_series_of_chromosome_from_RSIDs()
