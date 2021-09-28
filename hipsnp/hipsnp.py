@@ -51,7 +51,39 @@ def ensembl_human_rsid(rsid):
     
     url = 'http://rest.ensembl.org/variation/human/' + rsid + '?content-type=application/json'
     response = requests.get(url)
+<<<<<<< HEAD
     return response
+=======
+    return response ## returns a request.Response object, not a JSON object
+
+
+def datalad_get_chromosome(c,
+        source=None,
+        imputationdir='imputation',
+        path=None):
+    """
+    get a particular chromosome's (imputed) data
+    c: chromosome number, string
+    source: datalad source, string (default: None which maps to 'ria+http://ukb.ds.inm7.de#~genetic')
+    imputationdir: directory in which the imputation files are stored, string (default: 'imputation')
+    path: directory to use for the datalad dataset, string (default: None which maps to '/tmp/genetic')
+    returns: list of files, datalad dataset object, list of datalad get output
+    """
+    if source is None or source == '':
+        source="ria+http://ukb.ds.inm7.de#~genetic"
+
+    if path is None or path == '':
+        pathOS = os.path.join('/tmp', 'genetic')
+        path = Path('/tmp/genetic')
+        print('t1:', pathOS == path)
+
+    ds = datalad.clone(source=source, path=path)
+    filesOS = glob.glob(os.path.join(ds.path, imputationdir, '*_c' + str(c) + '_*'))
+    files = list(Path(ds.path).joinpath(imputationdir).glob('*_c' + str(c) + '_*'))
+    print('t2:', filesOS == files)
+    getout = ds.get(files)
+    return files, ds, getout
+>>>>>>> parent of eed1b8c (use tempfile, test ensemble query)
 
 
 def rsid2chromosome(rsids, chromosomes=None):
@@ -61,8 +93,15 @@ def rsid2chromosome(rsids, chromosomes=None):
     chromosomes: list of chromosomes, string or list of strings
     returns: dataframe with columns 'rsids' and 'chromosomes'
     """
+<<<<<<< HEAD
     if isinstance(rsids, str) and os.path.isfile(rsids):
         rsids = pd.read_csv(rsids, header=None, sep='\t', comment='#')
+=======
+    # if isinstance(rsids, str) and os.path.isfile(rsids):
+    if isinstance(rsids, str) and Path(rsids).is_file():
+        print('t3:', all([os.path.isfile(rsids), Path(rsids).is_file()]))
+        rsids = pd.read_csv(rsids, header=None, sep='\t')
+>>>>>>> parent of eed1b8c (use tempfile, test ensemble query)
         if rsids.shape[1] > 1:
             # this check provides support for PSG files
             if isinstance(rsids.iloc[0,1], str):
@@ -124,12 +163,26 @@ def rsid2snp(rsids, outdir,
     if qctool is None:
         qctool = shutil.which('qctool')
 
+<<<<<<< HEAD
     if qctool is None or os.path.isfile(qctool) is False:
         print('qctool is not available')
         raise
 
     if not os.path.exists(outdir):
         os.makedirs(outdir)
+=======
+    # if qctool is None or os.path.isfile(qctool) is False:
+    if qctool is None or Path(qctool).is_file() is False:
+        print('t4:', all([os.path.isfile(qctool), Path(qctool).is_file()]))
+        print('qctool is not available')
+        raise
+
+    # if not os.path.exists(outdir):
+    if not Path(outdir).exists():
+        print('t5: ', not all([os.path.exists(outdir), Path(outdir).exists()]))
+        # os.makedirs(outdir)
+        Path(outdir).mkdir()
+>>>>>>> parent of eed1b8c (use tempfile, test ensemble query)
 
     if force is True and os.listdir(outdir):
         print('the output directory must be empty')
