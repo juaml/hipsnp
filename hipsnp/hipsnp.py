@@ -44,12 +44,10 @@ def datalad_get_chromosome(c,
     if path is None or path == '':
         pathOS = os.path.join('/tmp', 'genetic')
         path = Path('/tmp/genetic')
-        print('t1:', pathOS == path)
 
     ds = datalad.clone(source=source, path=path)
     filesOS = glob.glob(os.path.join(ds.path, imputationdir, '*_c' + str(c) + '_*'))
     files = list(Path(ds.path).joinpath(imputationdir).glob('*_c' + str(c) + '_*'))
-    print('t2:', filesOS == files)
     getout = ds.get(files)
     return files, ds, getout
 
@@ -63,7 +61,6 @@ def rsid2chromosome(rsids, chromosomes=None):
     """
     # if isinstance(rsids, str) and os.path.isfile(rsids):
     if isinstance(rsids, str) and Path(rsids).is_file():
-        print('t3:', all([os.path.isfile(rsids), Path(rsids).is_file()]))
         rsids = pd.read_csv(rsids, header=None, sep='\t')
         if rsids.shape[1] > 1:
             chromosomes = list(rsids.iloc[:,1])
@@ -121,13 +118,11 @@ def rsid2vcf(rsids, outdir,
 
     # if qctool is None or os.path.isfile(qctool) is False:
     if qctool is None or Path(qctool).is_file() is False:
-        print('t4:', all([os.path.isfile(qctool), Path(qctool).is_file()]))
         print('qctool is not available')
         raise
 
     # if not os.path.exists(outdir):
     if not Path(outdir).exists():
-        print('t5: ', not all([os.path.exists(outdir), Path(outdir).exists()]))
         # os.makedirs(outdir)
         Path(outdir).mkdir()
 
