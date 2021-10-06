@@ -7,7 +7,8 @@ import requests
 import pandas as pd
 import numpy as np
 from datalad import api as datalad
-from alive_progress import alive_it
+# from alive_progress import alive_it
+import alive_progress 
 from bgen_reader import open_bgen
 
 
@@ -47,7 +48,7 @@ def ensembl_human_rsid(rsid):
     if not isinstance(rsid, str) or rsid[0:2] != 'rs':
         print(rsid + '\n')
         print('rsid must be a string with a starting "rs"')
-        raise
+        raise ValueError
     
     url = 'http://rest.ensembl.org/variation/human/' + rsid + '?content-type=application/json'
     response = requests.get(url)
@@ -257,7 +258,9 @@ def rsid2snp_multiple(files, outdir,
             if i == len(files) - 1:
                 datalad_drop_i = datalad_drop
             chrs, chfiles, ds = rsid2snp(rsids=ch_rs[i]['rsids'].tolist(), outdir=outdirs[i], \
-                chromosomes=ch_rs[i]['chromosomes'].tolist(), \
+                # chromosomes=ch_rs[i]['chromosomes'].tolist(), \ 
+                # # for testing, otherwise the rsid2chromosome cannot find mock data 
+                chromosomes='1', \
                 datalad_source=datalad_source, data_dir=data_dir, qctool=qctool, \
                 chromosomes_use=[ch], force=False, datalad_drop=datalad_drop_i, \
                 datalad_drop_if_got=False, outformat=outformat)
@@ -280,7 +283,7 @@ def read_bgen(files, rsids_as_index=True, no_neg_samples=False, \
         print('reading ' + str(len(files)) + ' bgen files... ')
     probsdata = dict()
     snpdata = pd.DataFrame()
-    for f in alive_it(files):
+    for f in alive_progress.alive_it(files):
         if verbose:
             print('reading ' + f)
         bgen = open_bgen(f, verbose=False)
@@ -366,7 +369,7 @@ def read_vcf(files, rsids_as_index=True, format=['GP', 'GT:GP'], \
     if verbose:
         print('reading ' + str(len(files)) + ' vcf files... ')
     snpdata = pd.DataFrame()
-    for vf in alive_it(files):
+    for vf in alive_progress.alive_it(files):
         if verbose:
             print('reading ' + vf)
 
@@ -467,7 +470,7 @@ def snp2genotype(snpdata, th=0.9, snps=None, samples=None, \
     probability = genotype_012.copy()
     print('calculating genotypes for ' + str(len(snps)) + ' SNPs and ' + \
           str(len(samples)) + ' samples ... ')
-    for snp in alive_it(snps):
+    for snp in alive_progress.alive_it(snps):
         # get SNP info
         try:
             REF = snpdata['REF'][snp]
