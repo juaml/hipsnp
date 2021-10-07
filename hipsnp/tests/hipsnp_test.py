@@ -4,6 +4,8 @@ from requests.models import Response
 import hipsnp as hps
 import json
 import pandas as pd
+import numpy as np
+from pandas._testing import assert_frame_equal
 import datalad.api as dl
 import tempfile
 
@@ -214,7 +216,8 @@ def test_read_bgen():
                                            chromosomes=chromosomes,
                                            chromosomes_use=None,
                                            outformat='bgen')
-        bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        # bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        bgenFiles = [tempdir + '/chromosome_1.bgen']
         snpdata, probsdata = hps.read_bgen(files=bgenFiles, 
                                             rsids_as_index=True, 
                                             no_neg_samples=False, 
@@ -259,14 +262,171 @@ def test_read_vcf():
                                            chromosomes_use=None,
                                            outformat='vcf')
 
-        bgenFiles = [tempdir + '/chromosome1.vcf']
-        snpdata, _ = hps.read_bgen(files=bgenFiles, 
-                                    rsids_as_index=True, 
-                                    no_neg_samples=False, 
-                                    join='inner', 
-                                    verify_integrity=False, 
-                                    probs_in_pd=False,
-                                    verbose=True)
+        bgenFiles = [tempdir + '/chromosome_1.vcf']
+        snpdata, _ = hps.read_vcf(files=bgenFiles, 
+                                  format=['GP', 'GT:GP'],
+                                  no_neg_samples=False, \
+                                  join='inner',
+                                  verify_integrity=False,
+                                  verbose=True)
        
         assert validatePANDAScolumns(snpdata, ['CHROM', 'POS', 'ID', 'REF', 'ALT','QUAL','FILTER', 'INFO'])
 
+def test_read_vcf_bgen_equal():
+    """Both files give the same output"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:        
+        # VCF
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           # if False, read_bgen cannot find them
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None,
+                                           outformat='vcf')
+
+        bgenFiles = [tempdir + '/chromosome_1.vcf']
+        snpdataVCF, _ = hps.read_vcf(files=bgenFiles, 
+                                  format=['GP', 'GT:GP'],
+                                  no_neg_samples=False, \
+                                  join='inner',
+                                  verify_integrity=False,
+                                  verbose=True)
+        # BGEN
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           # if False, read_bgen cannot find them
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None,
+                                           outformat='bgen')
+
+        bgenFiles = [tempdir + '/chromosome_1.bgen']
+        snpdataBGEN, probsdata = hps.read_bgen(files=bgenFiles, 
+                                            rsids_as_index=True, 
+                                            no_neg_samples=False, 
+                                            join='inner', 
+                                            verify_integrity=False, 
+                                            probs_in_pd=False,
+                                            verbose=True)
+
+        with pytest.raises(AssertionError):
+            assert_frame_equal(snpdataBGEN, snpdataVCF ) # fails, 
+
+        for column in snpdataBGEN.columns:
+            if column == 'POS' or column == 'ID':
+                with pytest.raises(AssertionError):
+                    assert snpdataBGEN[column].equals(snpdataVCF[column])
+            else:
+                assert snpdataBGEN[column].equals(snpdataVCF[column])
+
+
+
+
+def test_GP2dosage_operations():
+    """Same solution for both compuations"""
+    mock_GP  = pd.DataFrame(np.ones((3, 3)))
+    mock_REF = ['b', 'a']
+    mock_ALT = ['a', 'b']
+    mock_EA  = 'a'
+    dosis = []
+    for i in range(2):
+        dosis.append(hps.GP2dosage(mock_GP, mock_REF[i], mock_ALT[i], mock_EA))
+    assert all(dosis[0] == dosis[1])
+    # assertin based on teh equations in the code, if the code is wrong the test as well.
+
+def test_GP2dosage_missmatch_EA_RE_ALT():
+    mock_GP  = pd.DataFrame(np.ones((3, 3)))
+    mock_REF = ['b']
+    mock_ALT = ['b']
+    mock_EA  = 'a'
+    with pytest.raises(NameError):
+        hps.GP2dosage(mock_GP, mock_REF, mock_ALT, mock_EA) # snp is not defined
+
+def test_snp2genotype_from_SNPfiles():
+    """compute SNP from mock data, then get genotype"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:
+
+        _, files, _ = hps.rsid2snp(rsids,
+                                    outdir=tempdir,
+                                    datalad_source=source,
+                                    qctool=qctool,
+                                    datalad_drop=True,
+                                    datalad_drop_if_got=True,
+                                    data_dir=tempdir,
+                                    force=False,
+                                    chromosomes=chromosomes,
+                                    chromosomes_use=None,
+                                    outformat='bgen')
+        
+        with pytest.raises(AttributeError): # not implemted reading from snp files
+            hps.snp2genotype(snpdata = files,
+                            th=0.9,
+                            snps=None, 
+                            samples=None, 
+                            genotype_format='allele',
+                            probs=None, 
+                            weights=None, 
+                            verbose=True, 
+                            profiler=None)
+
+
+
+
+def test_snp2genotype_from_VCFfile():
+    """compute SNP from mock data in vcf format, read_vcf, then get genotype"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:        
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           # if False, read_bgen cannot find them
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None,
+                                           outformat='vcf')
+
+        bgenFiles = [tempdir + '/chromosome_1.vcf']
+        snpdata, _ = hps.read_vcf(files=bgenFiles, 
+                                  format=['GP', 'GT:GP'],
+                                  no_neg_samples=False, \
+                                  join='inner',
+                                  verify_integrity=False,
+                                  verbose=True)
+        
+        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = files,
+                                                        th=0.9,
+                                                        snps=None, 
+                                                        samples=None, 
+                                                        genotype_format='allele',
+                                                        probs=None, 
+                                                        weights=None, 
+                                                        verbose=True, 
+                                                        profiler=None)

@@ -433,7 +433,7 @@ def snp2genotype(snpdata, th=0.9, snps=None, samples=None, \
     if not isinstance(snpdata, pd.DataFrame):
         print("don't know how to handle the input")
         print('please use read_vcf or read_bgen to get the required input')
-        raise
+        raise AttributeError
 
     nsnp = snpdata.shape[0]
     ncol = snpdata.shape[1]
