@@ -3,6 +3,7 @@ import os
 import glob
 import shutil
 import subprocess
+from pandas.core.series import Series
 import requests
 import pandas as pd
 import numpy as np

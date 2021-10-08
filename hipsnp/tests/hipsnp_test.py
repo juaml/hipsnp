@@ -390,10 +390,18 @@ def test_snp2genotype_from_SNPfiles():
                             profiler=None)
 
 
+def pandas_has_NaN(data):
+    if isinstance(data, pd.DataFrame):
+        return data.isnull().values.any()
+    elif isinstance(data, pd.Series):
+        return any([np.isnan(data_i).any() for data_i in data])
+    else:
+        raise AttributeError
 
 
 def test_snp2genotype_from_VCFfile():
-    """compute SNP from mock data in vcf format, read_vcf, then get genotype"""
+    """ Compute SNP from mock data in vcf format, read_vcf, then get genotype
+        Assert that output values are not nan"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     rsids = ['RSID_101']
     chromosomes = ['1']
@@ -405,7 +413,6 @@ def test_snp2genotype_from_VCFfile():
                                            datalad_source=source,
                                            qctool=qctool,
                                            datalad_drop=False,
-                                           # if False, read_bgen cannot find them
                                            datalad_drop_if_got=True,
                                            data_dir=tempdir,
                                            force=False,
@@ -421,7 +428,7 @@ def test_snp2genotype_from_VCFfile():
                                   verify_integrity=False,
                                   verbose=True)
         
-        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = files,
+        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
                                                         th=0.9,
                                                         snps=None, 
                                                         samples=None, 
@@ -430,3 +437,85 @@ def test_snp2genotype_from_VCFfile():
                                                         weights=None, 
                                                         verbose=True, 
                                                         profiler=None)
+        
+        assert not pandas_has_NaN(geno_allele)
+        assert not pandas_has_NaN(geno_012)
+        assert pandas_has_NaN(prob) # is it expected to be NaNs?
+
+
+def test_snp2genotype_from_BGENfile():
+    """ Compute SNP from mock data in vcf format, read_vcf, then get genotype
+        Assert that output values are not nan"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:        
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None,
+                                           outformat='bgen')
+        # bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        bgenFiles = [tempdir + '/chromosome_1.bgen']
+        snpdata, probsdata = hps.read_bgen(files=bgenFiles, 
+                                            rsids_as_index=True, 
+                                            no_neg_samples=False, 
+                                            join='inner', 
+                                            verify_integrity=False, 
+                                            probs_in_pd=False,
+                                            verbose=True)
+        
+        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
+                                                        th=0.9,
+                                                        snps=None, 
+                                                        samples=None, 
+                                                        genotype_format='allele',
+                                                        probs=None, 
+                                                        weights=None, 
+                                                        verbose=True, 
+                                                        profiler=None)
+        
+        assert geno_allele.empty
+        assert geno_012.empty
+        assert prob.empty 
+        # is it expected that they are empty? snpsdata has <9 columns,
+        # so line 445 in hispnp returns an empty list
+
+        # With probabilities given by read_bgen
+        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
+                                                th=0.9,
+                                                snps=None, 
+                                                samples=None, 
+                                                genotype_format='allele',
+                                                probs=probsdata, 
+                                                weights=None, 
+                                                verbose=True, 
+                                                profiler=None)
+
+        assert not pandas_has_NaN(geno_allele)
+        assert not pandas_has_NaN(geno_012)
+        assert pandas_has_NaN(prob) # NaNs because todo fix in line 542?
+
+        # with weights
+        weights_mock = '/home/oportoles/Documents/MyCode/hipsnp/test_data/weights.csv'
+        geno_allele, geno_012, risk = hps.snp2genotype(snpdata = snpdata,
+                                        th=0.9,
+                                        snps=None, 
+                                        samples=None, 
+                                        genotype_format='allele',
+                                        probs=probsdata, 
+                                        weights=weights_mock, 
+                                        verbose=True, 
+                                        profiler=None)
+
+        assert not pandas_has_NaN(geno_allele)
+        assert not pandas_has_NaN(geno_012)
+        assert not pandas_has_NaN(risk) # NaNs because todo fix in line 542?
