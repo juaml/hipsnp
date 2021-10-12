@@ -13,6 +13,16 @@ import alive_progress
 from bgen_reader import open_bgen
 
 
+
+# class Genotype():
+#     def __init__(self):
+#         self.bgenDF = None
+#         self.sample_probs = dict()
+    
+#     @classmethod
+#     def read_bgen(cls):
+
+
 def get_chromosome(c,
         datalad_source=None,
         imputationdir='imputation',
@@ -567,7 +577,7 @@ def GP2dosage(GP, REF, ALT, EA):
     elif EA == ALT:
         dosage = GP.iloc[:,1] + 2*GP.iloc[:,2]
     else:
-        
+
         print('SNP ' + snp + ' ALT ' + ALT + ' or REF ' + REF + \
               'do not match EA ' + EA)
         raise
