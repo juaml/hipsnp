@@ -241,101 +241,6 @@ def test_read_weights_mock():
     assert  validatePANDAScolumns(w, ['ea', 'weight', 'rsid', 'chr'])
 
 
-def test_read_vcf():
-    """ outputs pandas dataframe with cols"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    rsids = ['RSID_101']
-    chromosomes = ['1']
-    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
-
-    with tempfile.TemporaryDirectory() as tempdir:        
-        ch_rs, files, dataL = hps.rsid2snp(rsids,
-                                           outdir=tempdir,
-                                           datalad_source=source,
-                                           qctool=qctool,
-                                           datalad_drop=False,
-                                           # if False, read_bgen cannot find them
-                                           datalad_drop_if_got=True,
-                                           data_dir=tempdir,
-                                           force=False,
-                                           chromosomes=chromosomes,
-                                           chromosomes_use=None,
-                                           outformat='vcf')
-
-        bgenFiles = [tempdir + '/chromosome_1.vcf']
-        snpdata, _ = hps.read_vcf(files=bgenFiles, 
-                                  format=['GP', 'GT:GP'],
-                                  no_neg_samples=False, \
-                                  join='inner',
-                                  verify_integrity=False,
-                                  verbose=True)
-       
-        assert validatePANDAScolumns(snpdata, ['CHROM', 'POS', 'ID', 'REF', 'ALT','QUAL','FILTER', 'INFO'])
-
-def test_read_vcf_bgen_equal():
-    """Both files give the same output"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    rsids = ['RSID_101']
-    chromosomes = ['1']
-    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
-
-    with tempfile.TemporaryDirectory() as tempdir:        
-        # VCF
-        ch_rs, files, dataL = hps.rsid2snp(rsids,
-                                           outdir=tempdir,
-                                           datalad_source=source,
-                                           qctool=qctool,
-                                           datalad_drop=False,
-                                           # if False, read_bgen cannot find them
-                                           datalad_drop_if_got=True,
-                                           data_dir=tempdir,
-                                           force=False,
-                                           chromosomes=chromosomes,
-                                           chromosomes_use=None,
-                                           outformat='vcf')
-
-        bgenFiles = [tempdir + '/chromosome_1.vcf']
-        snpdataVCF, _ = hps.read_vcf(files=bgenFiles, 
-                                  format=['GP', 'GT:GP'],
-                                  no_neg_samples=False, \
-                                  join='inner',
-                                  verify_integrity=False,
-                                  verbose=True)
-        # BGEN
-        ch_rs, files, dataL = hps.rsid2snp(rsids,
-                                           outdir=tempdir,
-                                           datalad_source=source,
-                                           qctool=qctool,
-                                           datalad_drop=False,
-                                           # if False, read_bgen cannot find them
-                                           datalad_drop_if_got=True,
-                                           data_dir=tempdir,
-                                           force=False,
-                                           chromosomes=chromosomes,
-                                           chromosomes_use=None,
-                                           outformat='bgen')
-
-        bgenFiles = [tempdir + '/chromosome_1.bgen']
-        snpdataBGEN, probsdata = hps.read_bgen(files=bgenFiles, 
-                                            rsids_as_index=True, 
-                                            no_neg_samples=False, 
-                                            join='inner', 
-                                            verify_integrity=False, 
-                                            probs_in_pd=False,
-                                            verbose=True)
-
-        with pytest.raises(AssertionError):
-            assert_frame_equal(snpdataBGEN, snpdataVCF ) # fails, 
-
-        for column in snpdataBGEN.columns:
-            if column == 'POS' or column == 'ID':
-                with pytest.raises(AssertionError):
-                    assert snpdataBGEN[column].equals(snpdataVCF[column])
-            else:
-                assert snpdataBGEN[column].equals(snpdataVCF[column])
-
-
-
 
 def test_GP2dosage_operations():
     """Same solution for both compuations"""
@@ -399,52 +304,9 @@ def pandas_has_NaN(data):
         raise AttributeError
 
 
-def test_snp2genotype_from_VCFfile():
-    """ Compute SNP from mock data in vcf format, read_vcf, then get genotype
-        Assert that output values are not nan"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    rsids = ['RSID_101']
-    chromosomes = ['1']
-    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
-
-    with tempfile.TemporaryDirectory() as tempdir:        
-        ch_rs, files, dataL = hps.rsid2snp(rsids,
-                                           outdir=tempdir,
-                                           datalad_source=source,
-                                           qctool=qctool,
-                                           datalad_drop=False,
-                                           datalad_drop_if_got=True,
-                                           data_dir=tempdir,
-                                           force=False,
-                                           chromosomes=chromosomes,
-                                           chromosomes_use=None,
-                                           outformat='vcf')
-
-        bgenFiles = [tempdir + '/chromosome_1.vcf']
-        snpdata, _ = hps.read_vcf(files=bgenFiles, 
-                                  format=['GP', 'GT:GP'],
-                                  no_neg_samples=False, \
-                                  join='inner',
-                                  verify_integrity=False,
-                                  verbose=True)
-        
-        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
-                                                        th=0.9,
-                                                        snps=None, 
-                                                        samples=None, 
-                                                        genotype_format='allele',
-                                                        probs=None, 
-                                                        weights=None, 
-                                                        verbose=True, 
-                                                        profiler=None)
-        
-        assert not pandas_has_NaN(geno_allele)
-        assert not pandas_has_NaN(geno_012)
-        assert pandas_has_NaN(prob) # is it expected to be NaNs?
-
 
 def test_snp2genotype_from_BGENfile():
-    """ Compute SNP from mock data in vcf format, read_vcf, then get genotype
+    """ Compute SNP from mock data in bgen format, read_bgen, then get genotype
         Assert that output values are not nan"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     rsids = ['RSID_101']
@@ -478,7 +340,7 @@ def test_snp2genotype_from_BGENfile():
                                                         snps=None, 
                                                         samples=None, 
                                                         genotype_format='allele',
-                                                        probs=None, 
+                                                        probs=None, # probsdata
                                                         weights=None, 
                                                         verbose=True, 
                                                         profiler=None)
