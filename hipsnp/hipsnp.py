@@ -567,6 +567,7 @@ def GP2dosage(GP, REF, ALT, EA):
     elif EA == ALT:
         dosage = GP.iloc[:,1] + 2*GP.iloc[:,2]
     else:
+        
         print('SNP ' + snp + ' ALT ' + ALT + ' or REF ' + REF + \
               'do not match EA ' + EA)
         raise

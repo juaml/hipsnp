@@ -16,23 +16,45 @@ def filesHaveName(dataLget):
     sameFiles = 'example_c1_v0.bgen' and 'example_c1_v0.sample' in filenames
     return sameFiles
 
-@pytest.mark.parametrize("c",[('1'),('23'),(None),(1)])
-def test_get_chromosome_outputTypes(c):
+def test_get_chromosome_outputTypes_pass():
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
-    
+    cs = ['1', 1]
     with tempfile.TemporaryDirectory() as tempdir:
-        filesRef = [tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.bgen',
-                    tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.sample']
-        errors = []
 
-        files, ds, getout = hps.get_chromosome(c=c, datalad_source=source, data_dir=tempdir)
-        if not sorted(filesRef) == sorted(files):
-            errors.append('Error: wrong data paths')
-        if not type(ds) == dl.Dataset:
-            errors.append('Error: not a Datalad Dataset')
-        if not filesHaveName(getout):
-            errors.append('Error: wrong data files')
-        assert not errors, "errors occured:\n{}".format("\n".join(errors))
+        errors = []
+        for c in cs:
+            filesRef = [tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.bgen',
+            tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.sample']
+            files, ds, getout = hps.get_chromosome(c=c, datalad_source=source, data_dir=tempdir)
+            if not sorted(filesRef) == sorted(files):
+                errors.append('Error: wrong data paths')
+            if not type(ds) == dl.Dataset:
+                errors.append('Error: not a Datalad Dataset')
+            if not filesHaveName(getout):
+                errors.append('Error: wrong data files')
+            assert not errors, "errors occured:\n{}".format("\n".join(errors))
+
+
+def test_get_chromosome_outputTypes_failes():
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
+
+    cs = ['23', None]
+    with tempfile.TemporaryDirectory() as tempdir:
+        for c in cs:
+            filesRef = [tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.bgen',
+                        tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.sample']
+            errors = []
+
+            files, ds, getout = hps.get_chromosome(c=c, datalad_source=source, data_dir=tempdir)
+            if not sorted(filesRef) == sorted(files):
+                errors.append('Error: wrong data paths')
+            if not type(ds) == dl.Dataset:
+                errors.append('Error: not a Datalad Dataset')
+            if not filesHaveName(getout):
+                errors.append('Error: wrong data files')
+            assert len(errors) > 0
+            print( "errors occured:\n{}".format("\n".join(errors)))
+
 
 def test_get_chromosome_output_Datalad():
     c = '1'
@@ -56,22 +78,6 @@ def test_get_chromosome_output_None():
         assert ds == None
         assert len(getout) == 2
 
-
-
-@pytest.mark.parametrize("rsid",
-                         [('rs699'),
-                          ('rs_699'),
-                          ('rsid699'),
-                          ('rsid_699'),
-                          ('RS699'),
-                          ('RS_699'),
-                          ('699'),
-                          ('rs 699')])
-def test_ensembl_human_rsid_is_Response(rsid):
-    """test output is in JSON format"""
-    # mock_rsid = 'rs699'
-    outRST = hps.ensembl_human_rsid(rsid)
-    assert type(outRST) == Response
 
 
 def validateRSTalleles(textOut):
@@ -260,7 +266,7 @@ def test_GP2dosage_missmatch_EA_RE_ALT():
     mock_ALT = ['b']
     mock_EA  = 'a'
     with pytest.raises(NameError):
-        hps.GP2dosage(mock_GP, mock_REF, mock_ALT, mock_EA) # snp is not defined
+        hps.GP2dosage(mock_GP, mock_REF, mock_ALT, mock_EA) # snp is not defined in print statement
 
 def test_snp2genotype_from_SNPfiles():
     """compute SNP from mock data, then get genotype"""
@@ -284,6 +290,7 @@ def test_snp2genotype_from_SNPfiles():
                                     outformat='bgen')
         
         with pytest.raises(AttributeError): # not implemted reading from snp files
+            # docstring says that it read from snp file paths, but it does not have it implemented
             hps.snp2genotype(snpdata = files,
                             th=0.9,
                             snps=None, 
@@ -295,7 +302,7 @@ def test_snp2genotype_from_SNPfiles():
                             profiler=None)
 
 
-def pandas_has_NaN(data):
+def pandas_has_ANY_NaN(data):
     if isinstance(data, pd.DataFrame):
         return data.isnull().values.any()
     elif isinstance(data, pd.Series):
@@ -303,7 +310,13 @@ def pandas_has_NaN(data):
     else:
         raise AttributeError
 
-
+def pandas_has_ALL_NaN(data):
+    if isinstance(data, pd.DataFrame):
+        return data.isnull().values.all()
+    elif isinstance(data, pd.Series):
+        return all([np.isnan(data_i).all() for data_i in data])
+    else:
+        raise AttributeError
 
 def test_snp2genotype_from_BGENfile():
     """ Compute SNP from mock data in bgen format, read_bgen, then get genotype
@@ -335,12 +348,13 @@ def test_snp2genotype_from_BGENfile():
                                             probs_in_pd=False,
                                             verbose=True)
         
+        # when probs are not given, the aoutput are empty        
         geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
                                                         th=0.9,
                                                         snps=None, 
                                                         samples=None, 
                                                         genotype_format='allele',
-                                                        probs=None, # probsdata
+                                                        probs=None,
                                                         weights=None, 
                                                         verbose=True, 
                                                         profiler=None)
@@ -348,8 +362,29 @@ def test_snp2genotype_from_BGENfile():
         assert geno_allele.empty
         assert geno_012.empty
         assert prob.empty 
-        # is it expected that they are empty? snpsdata has <9 columns,
+       # snpsdata has <9 columns,
         # so line 445 in hispnp returns an empty list
+
+        # with probs given
+        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
+                                                        th=0.9,
+                                                        snps=None, 
+                                                        samples=None, 
+                                                        genotype_format='allele',
+                                                        probs=probsdata,
+                                                        weights=None, 
+                                                        verbose=True, 
+                                                        profiler=None)
+        
+        assert not geno_allele.empty
+        assert not geno_012.empty
+        assert not prob.empty
+        assert not pandas_has_ANY_NaN(geno_allele)
+        assert not pandas_has_ANY_NaN(geno_012) 
+
+        assert pandas_has_ALL_NaN(prob)
+
+        # NaNs because todo fix in line 542? probability are only assigned to nan values
 
         # With probabilities given by read_bgen
         geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
@@ -362,9 +397,9 @@ def test_snp2genotype_from_BGENfile():
                                                 verbose=True, 
                                                 profiler=None)
 
-        assert not pandas_has_NaN(geno_allele)
-        assert not pandas_has_NaN(geno_012)
-        assert pandas_has_NaN(prob) # NaNs because todo fix in line 542?
+        assert not pandas_has_ANY_NaN(geno_allele)
+        assert not pandas_has_ANY_NaN(geno_012)
+        assert pandas_has_ANY_NaN(prob) 
 
         # with weights
         weights_mock = '/home/oportoles/Documents/MyCode/hipsnp/test_data/weights.csv'
@@ -378,6 +413,26 @@ def test_snp2genotype_from_BGENfile():
                                         verbose=True, 
                                         profiler=None)
 
-        assert not pandas_has_NaN(geno_allele)
-        assert not pandas_has_NaN(geno_012)
-        assert not pandas_has_NaN(risk) # NaNs because todo fix in line 542?
+        assert not pandas_has_ANY_NaN(geno_allele)
+        assert not pandas_has_ANY_NaN(geno_012)
+        assert not pandas_has_ANY_NaN(risk) # NaNs because todo fix in line 542?
+        assert risk.sum().values[0] == 0 # weights are set to None becasue no matching snp and rsid
+        # EA  = weights['ea'][weights['rsid'] == snp].values
+
+        # with weights with RSID_101
+        weights_mock = '/home/oportoles/Documents/MyCode/hipsnp/test_data/weights_withRSID_101.csv'
+        geno_allele, geno_012, risk = hps.snp2genotype(snpdata = snpdata,
+                                        th=0.9,
+                                        snps=None, 
+                                        samples=None, 
+                                        genotype_format='allele',
+                                        probs=probsdata, 
+                                        weights=weights_mock, 
+                                        verbose=True, 
+                                        profiler=None)
+
+        assert not pandas_has_ANY_NaN(geno_allele)
+        assert not pandas_has_ANY_NaN(geno_012)
+        assert not pandas_has_ANY_NaN(risk) # NaNs because todo fix in line 542?
+        assert risk.sum().values[0] > 0 # weights are set to None becasue no matching snp and rsid
+        # EA  = weights['ea'][weights['rsid'] == snp].values
