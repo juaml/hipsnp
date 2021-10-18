@@ -9,6 +9,8 @@ from pandas._testing import assert_frame_equal
 import datalad.api as dl
 import tempfile
 
+from hipsnp.hipsnp import Genotype
+
 def filesHaveName(dataLget):
     """files obtined with DataLad are the exnple files"""
     filenames = [os.path.basename(ind['path'])
@@ -433,3 +435,92 @@ def test_snp2genotype_from_BGENfile():
         assert not pandas_has_ANY_NaN(risk) # NaNs because todo fix in line 542?
         assert risk.sum().values[0] > 0 # weights are set to None becasue no matching snp and rsid
         # EA  = weights['ea'][weights['rsid'] == snp].values
+
+
+def test_read_from_bgen():
+    """Function read_began and Genotype.read_from_bgen have the same output"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:        
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           # if False, read_bgen cannot find them
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None,
+                                           outformat='bgen')
+        # bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        bgenFiles = [tempdir + '/chromosome_1.bgen']
+        snpdata, probsdata = hps.read_bgen(files=bgenFiles, 
+                                            rsids_as_index=True, 
+                                            no_neg_samples=False, 
+                                            join='inner', 
+                                            verify_integrity=False, 
+                                            probs_in_pd=False,
+                                            verbose=True)
+
+        Genotype.read_from_bgen(files=bgenFiles, 
+                                rsids_as_index=True, 
+                                no_neg_samples=False, 
+                                join='inner', 
+                                verify_integrity=False, 
+                                probs_in_pd=False,
+                                verbose=True)
+
+        assert_frame_equal(snpdata, Genotype.bgenDF)
+        assert np.array_equal(np.squeeze(probsdata['0']['probs']), Genotype.sample_probs[rsids[0]][1])
+        assert np.array_equal(probsdata['0']['samples'], Genotype.sample_probs[rsids[0]][0])
+
+
+def test_read_from_bgen_multiple_files():
+    """Function read_began and Genotype.read_from_bgen have the same output"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+    nFiles = 5
+
+    with tempfile.TemporaryDirectory() as tempdir:        
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           # if False, read_bgen cannot find them
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None,
+                                           outformat='bgen')
+        # bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        bgenFiles = [tempdir + '/chromosome_1.bgen']
+        bgenFiles *= nFiles
+        snpdata, probsdata = hps.read_bgen(files=bgenFiles, 
+                                            rsids_as_index=True, 
+                                            no_neg_samples=False, 
+                                            join='inner', 
+                                            verify_integrity=False, 
+                                            probs_in_pd=False,
+                                            verbose=True)
+
+        Genotype.read_from_bgen(files=bgenFiles, 
+                                rsids_as_index=True, 
+                                no_neg_samples=False, 
+                                join='inner', 
+                                verify_integrity=False, 
+                                probs_in_pd=False,
+                                verbose=True)
+
+        assert_frame_equal(snpdata, Genotype.bgenDF)
+        for i in range(nFiles):
+            assert np.array_equal(np.squeeze(probsdata[str(i)]['probs']), Genotype.sample_probs[rsids[0]][1])
+            assert np.array_equal(probsdata[str(i)]['samples'], Genotype.sample_probs[rsids[0]][0])

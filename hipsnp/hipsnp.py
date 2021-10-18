@@ -14,13 +14,6 @@ from bgen_reader import open_bgen
 
 
 
-# class Genotype():
-#     def __init__(self):
-#         self.bgenDF = None
-#         self.sample_probs = dict()
-    
-#     @classmethod
-#     def read_bgen(cls):
 
 
 def get_chromosome(c,
@@ -610,3 +603,23 @@ def parse_GTGP(GTGP, format=None):
             GP = [np.nan, np.nan, np.nan]
     GP = np.array(GP)
     return GT, GP
+
+
+
+
+class Genotype():
+    def __init__(self):
+        self.bgenDF = None
+        self.sample_probs = dict()
+    
+    @classmethod
+    def read_from_bgen(cls, files, rsids_as_index=True, no_neg_samples=False, \
+            join='inner', verify_integrity=False, \
+            probs_in_pd=False, verbose=True):
+        cls.bgenDF, probs = read_bgen(files, rsids_as_index=True, no_neg_samples=False, \
+                                      join='inner', verify_integrity=False, \
+                                      probs_in_pd=False, verbose=True)
+        cls.sample_probs = dict()
+        for prob_key in probs:
+            cls.sample_probs[probs[prob_key]['rsids'][0]] = (probs[prob_key]['samples'], 
+                                                             np.squeeze(probs[prob_key]['probs']))
