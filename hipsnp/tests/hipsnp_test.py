@@ -383,7 +383,7 @@ def test_snp2genotype_from_BGENfile():
 
         assert pandas_has_ALL_NaN(prob)
 
-        # NaNs because todo fix in line 542? probability are only assigned to nan values
+        # NaNs because todo fix in line 542 - 5446? probability are only assigned to nan values
 
         # With probabilities given by read_bgen
         geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
@@ -435,6 +435,55 @@ def test_snp2genotype_from_BGENfile():
         assert not pandas_has_ANY_NaN(risk) # NaNs because todo fix in line 542?
         assert risk.sum().values[0] > 0 # weights are set to None becasue no matching snp and rsid
         # EA  = weights['ea'][weights['rsid'] == snp].values
+
+def test_snp2genotype_from_BGENfile_with_repeated_rsids():
+    """ Compute SNP from mock data in bgen format, read_bgen, then get genotype
+        Assert that output values are not nan"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101', 'RSID_101',]
+    chromosomes = ['1', '1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:        
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None,
+                                           outformat='bgen')
+        # bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        bgenFiles = [tempdir + '/chromosome_1.bgen']
+        snpdata, probsdata = hps.read_bgen(files=bgenFiles, 
+                                            rsids_as_index=True, 
+                                            no_neg_samples=False, 
+                                            join='inner', 
+                                            verify_integrity=False, 
+                                            probs_in_pd=False,
+                                            verbose=True)
+
+        # with probs given
+        geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
+                                                        th=0.9,
+                                                        snps=None, 
+                                                        samples=None, 
+                                                        genotype_format='allele',
+                                                        probs=probsdata,
+                                                        weights=None, 
+                                                        verbose=True, 
+                                                        profiler=None)
+        
+        assert not geno_allele.empty
+        assert not geno_012.empty
+        assert not prob.empty
+        assert not pandas_has_ANY_NaN(geno_allele)
+        assert not pandas_has_ANY_NaN(geno_012) 
+
+        assert pandas_has_ALL_NaN(prob)
 
 
 def test_read_from_bgen():
