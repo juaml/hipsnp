@@ -2,8 +2,6 @@ import io
 import os
 import glob
 import shutil
-import subprocess
-from pandas.core.series import Series
 import requests
 import pandas as pd
 import numpy as np
@@ -13,13 +11,10 @@ import alive_progress
 from bgen_reader import open_bgen
 
 
-
-
-
 def get_chromosome(c,
-        datalad_source=None,
-        imputationdir='imputation',
-        data_dir=None):
+                   datalad_source=None,
+                   imputationdir='imputation',
+                   data_dir=None):
     """
     get a particular chromosome's (imputed) data
     c: chromosome number, string
@@ -31,7 +26,7 @@ def get_chromosome(c,
     if datalad_source is None or datalad_source == '':
         files = glob.glob(os.path.join(ds.path, imputationdir, '*_c' + str(c) + '_*'))
         ds = None
-        getout = ['datalad not used']*len(files)
+        getout = ['datalad not used'] * len(files)
     else:
         if data_dir is None or data_dir == '':
             data_dir = os.path.join('/tmp', 'genetic')
@@ -100,16 +95,17 @@ def rsid2chromosome(rsids, chromosomes=None):
     return df
 
 
-def rsid2snp(rsids, outdir,
-        datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
-        qctool=None,
-        datalad_drop=True,
-        datalad_drop_if_got=True,
-        data_dir=None,
-        force=False,
-        chromosomes=None,
-        chromosomes_use=None,
-        outformat='bgen'):
+def rsid2snp(rsids, 
+             outdir,
+             datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
+             qctool=None,
+             datalad_drop=True,
+             datalad_drop_if_got=True,
+             data_dir=None,
+             force=False,
+             chromosomes=None,
+             chromosomes_use=None,
+             outformat='bgen'):
     """
     convert rsids to snps
     rsids: list of rsids or a file with rsids, string or list of strings
@@ -332,6 +328,96 @@ def read_bgen(files, rsids_as_index=True, no_neg_samples=False, \
     return snpdata, probsdata
 
 
+def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
+
+    """Read bgen files and extract metadata and probabilites
+
+    Parameters
+    ----------
+    files : str or list(str)
+            Files to be read
+    verify_integrity : bool, default False
+            See pandas.concat documentation.
+
+    Returns
+    -------
+        snpdata : pandas DataFrame
+        row indexes: RSIDs; columns: CHROM, POS, ID, and FORMAT
+        probabilites : dict
+        keys: RDIDs, values: tuple(Smaples,
+                                   probilities : numpy array [Samples, 3])
+    """
+    if isinstance(files, str):
+        files = [files]
+    
+    assert len(files) == len(set(files)), "There are duplicate bgen files" 
+    # make sure that files exist
+    for f in files:
+        assert os.path.isfile(f)
+
+    # read all the files
+    if verbose:
+        print('reading ' + str(len(files)) + ' bgen files... ')
+  
+    snpdata = pd.DataFrame()
+    probabilites = dict()
+    for f in alive_progress.alive_it(files):
+        if verbose:
+            print('reading ' + f)
+        bgen = open_bgen(f, verbose=False)
+
+        # sanity checks
+        # we can only deal with biallelic variants
+        nalleles = np.unique(bgen.nalleles)
+        assert len(nalleles) == 1 and nalleles[0] == 2, \
+               "Only biallelic variants are allowed"
+        # find duplicate RSIDs within a file
+        if len(set(bgen.rsids)) != len(bgen.rsid):
+            import warnings
+            warnings.warn(f'Duplicated RSIDs in file {f}')
+            _, iX_unique_rsid_in_file = np.unique(bgen.rsids, 
+                                                  return_index=True)
+        else:
+            iX_unique_rsid_in_file = np.arange(len(bgen.rsids))
+        # find duplicates with previous files
+        if not snpdata.empty and np.sum(snpdata.index == bgen.rsids) != 0:
+            import warnings
+            warnings.warn('Files have duplicated RSIDs')
+            # indexes with rsids not previously taken
+            unique_rsid_across_files = np.isin(bgen.rsids, snpdata.index,
+                                               invert=True)
+            iX_unique_rsid_in_file = (iX_unique_rsid_in_file &
+                                      unique_rsid_across_files)
+
+        # add metadata of unique RSIDS. get REF and ALT
+        tmp = pd.DataFrame(index=bgen.rsids[iX_unique_rsid_in_file])
+        alleles = bgen.allele_ids[iX_unique_rsid_in_file]
+        alleles = np.array([a.split(',') for a in alleles])
+        tmp = tmp.assign(REF=alleles[:, 0], ALT=alleles[:, 1])
+        tmp = tmp.assign(CHROM=bgen.chromosomes[iX_unique_rsid_in_file], 
+                         POS=bgen.positions[iX_unique_rsid_in_file],
+                         ID=bgen.ids[iX_unique_rsid_in_file])
+        tmp['FORMAT'] = 'GP'
+        
+        if f == files[0]:
+            myjoin = 'outer'
+        else:
+            myjoin = 'inner'
+        # concatenate files
+        snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0, 
+                            verify_integrity=verify_integrity)
+        tmp = None
+
+        # crear probabilites data dictionary
+        probs = bgen.read()
+        tmp_probabilites = {k_rsid: (bgen.samples, np.squeeze(probs[:, i, :]))
+                            for i, k_rsid in enumerate(tmp.index) }
+
+        probabilites.update(tmp_probabilites)
+
+    return snpdata, probabilites
+
+
 def read_weights(weights):
     """
     read weights from a file
@@ -451,7 +537,7 @@ def snp2genotype(snpdata, th=0.9, snps=None, samples=None, \
             samples = probs[pkeys[0]]['samples']
             for pk in range(1, len(pkeys)): # if there are several bgen files (one per RSID), 
                 samples = np.append(samples, probs[pkeys[pk]]['samples']) # the samples of each file are appened togetehr
-                samples = np.unique(samples) # onlyt not repeated samples are kept
+                samples = np.unique(samples) # onlyt not repeated samples are kept and sorted
     else:
         if probs is None:
             assert all(sam in snpdata.columns for sam in samples)
@@ -508,9 +594,9 @@ def snp2genotype(snpdata, th=0.9, snps=None, samples=None, \
                         snpidx = snpidx[0][0]
 
                         index = probs[pk]['samples']  # samples in probs
-                        index_mask = np.in1d(index, samples)
+                        index_mask = np.in1d(index, samples) # boolean of elements in ar1 present in ar2
                         probs_pk = probs[pk]['probs'][:, snpidx, :]
-                        probs_pk = probs_pk[index_mask]               
+                        probs_pk = probs_pk[index_mask] # why a mask? all samples are taken always because the unique samples are kept               
                         # probs is samples x snps x 3
                         GP = pd.DataFrame(probs_pk, index=index[index_mask],
                                           columns=range(3))
@@ -610,24 +696,39 @@ def parse_GTGP(GTGP, format=None):
 
 
 class Genotype():
-    def __init__(self):
-        self.bgenDF = None
-        self.sample_probs = dict()
-    
+    def __init__(self, metadata, probabilities):
+        self.metadata = metadata # pandas dataframe == snp
+        self.probabilities = probabilities # tuple(samples, )
+        self._validate_arguments()
+
     @classmethod
-    def read_from_bgen(cls, files, rsids_as_index=True, no_neg_samples=False, \
+    def from_bgen(cls, files, rsids_as_index=True, no_neg_samples=False, \
             join='inner', verify_integrity=False, \
             probs_in_pd=False, verbose=True):
-        cls.bgenDF, probs = read_bgen(files, rsids_as_index=True, no_neg_samples=False, \
+
+        if isinstance(files, list):
+            assert len(files) == len(set(files)), "There are duplicate bgen files"     
+        
+        metadata, probs = read_bgen(files, rsids_as_index=True, no_neg_samples=False, \
                                       join='inner', verify_integrity=False, \
                                       probs_in_pd=False, verbose=True)
-        cls.sample_probs = dict()
+
+
+        probabilities = dict()
         for prob_key in probs:
-            cls.sample_probs[probs[prob_key]['rsids'][0]] = (probs[prob_key]['samples'], 
-                                                             np.squeeze(probs[prob_key]['probs']))
+            for i, rsid in enumerate(probs[prob_key]['rsids']):
+                if rsid not in probabilities.keys():
+                    probabilities[probs[prob_key][rsid]] = (probs[prob_key]['samples'][i], 
+                                                            np.squeeze(probs[prob_key]['probs'][:, i, :]))
+        return  Genotype(metadata, probabilities)                                           
+
+    def _validate_arguments(self):
+        """check: same RSID in metadata as probabilities, metadata has expected columns, consisten dimensions"""
 
 
-def snp_Genotype_2genotype(snpdata, gen:Genotype(), th=0.9, snps=None, samples=None, \
+
+
+def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
                 genotype_format='allele', probs=None, weights=None, \
                 verbose=True, profiler=None):
     """

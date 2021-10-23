@@ -221,8 +221,8 @@ def test_read_bgen():
                                            chromosomes=chromosomes,
                                            chromosomes_use=None,
                                            outformat='bgen')
-        # bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
-        bgenFiles = [tempdir + '/chromosome_1.bgen']
+        bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        # bgenFiles = [tempdir + '/chromosome_1.bgen']
         snpdata, probsdata = hps.read_bgen(files=bgenFiles, 
                                             rsids_as_index=True, 
                                             no_neg_samples=False, 
@@ -383,7 +383,7 @@ def test_snp2genotype_from_BGENfile():
 
         assert pandas_has_ALL_NaN(prob)
 
-        # NaNs because todo fix in line 542 - 5446? probability are only assigned to nan values
+        # NaNs because todo fix in line 542 - 546? probability are only assigned to nan values
 
         # With probabilities given by read_bgen
         geno_allele, geno_012, prob = hps.snp2genotype(snpdata = snpdata,
@@ -506,8 +506,12 @@ def test_read_from_bgen():
                                            chromosomes=chromosomes,
                                            chromosomes_use=None,
                                            outformat='bgen')
-        # bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
-        bgenFiles = [tempdir + '/chromosome_1.bgen']
+        
+        # make use of datalad.get to obtain the data.
+
+
+        bgenFiles = [tempdir + '/imputation/example_c1_v0.bgen']
+        # bgenFiles = [tempdir + '/chromosome_1.bgen']
         snpdata, probsdata = hps.read_bgen(files=bgenFiles, 
                                             rsids_as_index=True, 
                                             no_neg_samples=False, 
@@ -573,3 +577,4 @@ def test_read_from_bgen_multiple_files():
         for i in range(nFiles):
             assert np.array_equal(np.squeeze(probsdata[str(i)]['probs']), Genotype.sample_probs[rsids[0]][1])
             assert np.array_equal(probsdata[str(i)]['samples'], Genotype.sample_probs[rsids[0]][0])
+
