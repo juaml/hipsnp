@@ -696,15 +696,41 @@ def parse_GTGP(GTGP, format=None):
 
 
 class Genotype():
+    """Genotype probabilities and metadata
+    """
     def __init__(self, metadata, probabilities):
+        """Data and metadata regarding genotype probabilites
+
+        Args:
+            metadata (Pandas Dataframe): metadata assoviated to a variant.
+            indexes: RSIDS (str), columns: CHROM', 'POS', 'ID', 'FORMAT' 
+            probabilities (dict(str : tuple(str, 2d numpy array))): Dictionary where keys are
+            RSIDS (str) and values are a tuple  (Samples (str), probabilites (2d numpy array)). 
+            The first dimension of probabilites are Samples and the second dimension is 3.
+        """
+        self._validate_arguments(metadata, probabilities)
         self.metadata = metadata # pandas dataframe == snp
         self.probabilities = probabilities # tuple(samples, )
-        self._validate_arguments()
+        
 
     @classmethod
-    def from_bgen(cls, files, rsids_as_index=True, no_neg_samples=False, \
+    def from_bgen_transform(cls, files, rsids_as_index=True, no_neg_samples=False, \
             join='inner', verify_integrity=False, \
             probs_in_pd=False, verbose=True):
+        """Read bgen files and return Genotype Obj. It wraps read_bgen as origianaly
+        written and transforms output to fit Genotype Obj.
+
+        Args:
+            files (str): bgen files
+            rsids_as_index (bool, optional): [description]. Defaults to True.
+            no_neg_samples (bool, optional): [description]. Defaults to False.
+            verify_integrity (bool, optional): [description]. Defaults to False.
+            verbose (bool, optional): [description]. Defaults to True.
+
+        Returns:
+            Genotype: Object with metadata and probabilities
+        """        """"""  
+
 
         if isinstance(files, list):
             assert len(files) == len(set(files)), "There are duplicate bgen files"     
@@ -720,12 +746,37 @@ class Genotype():
                 if rsid not in probabilities.keys():
                     probabilities[probs[prob_key][rsid]] = (probs[prob_key]['samples'][i], 
                                                             np.squeeze(probs[prob_key]['probs'][:, i, :]))
-        return  Genotype(metadata, probabilities)                                           
+        return  Genotype(metadata, probabilities) 
 
-    def _validate_arguments(self):
-        """check: same RSID in metadata as probabilities, metadata has expected columns, consisten dimensions"""
+    @classmethod
+    def from_bgen(files, verify_integrity=False, verbose=True):
+        """Read bgen data and return Genotype object with metadata and probabilites
+
+        Args:
+            files (list(str)): list with paths to bgen files.
+            verify_integrity (bool, optional): Check for duplicates. See pandas.concat(). Defaults to False.
+            verbose (bool, optional): addiotinal processing information. Defaults to True.
+        """                                             
+        metadata, probabilities = read_bgen_for_Genotype(files=files, 
+                                                       verify_integrity=verify_integrity,
+                                                       verbose=verbose)
+        return Genotype(metadata, probabilities) 
 
 
+
+    def _validate_arguments(self, meta, prob):
+        """check Genotype arguments: 
+        - metadata DataFrame has columns 'CHROM', 'POS', 'ID', 'FORMAT'
+        - same order of RSID in metadata as probabilities, 
+        - probabilities has same dimensions"""
+
+        assert all((col in ['CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)),\
+               "Missign columns in metadata" 
+        assert list(meta.index) == list(prob.keys()),\
+               "Mismatch of RSIDs between metadata and probabilities" 
+        assert all([len(prob[k_key][0]) == prob[k_key][1].shape[0] &
+                    prob[k_key][1].shape[1] == 3 for k_key in prob.keys()]),\
+                "Mismatch dimensions between samples and probabilities" 
 
 
 def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
