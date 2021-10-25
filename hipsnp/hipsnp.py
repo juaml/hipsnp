@@ -149,7 +149,7 @@ def rsid2snp(rsids,
     for c in range(len(uchromosomes)):
         ch = uchromosomes[c]
         if chromosomes_use is not None and ch not in chromosomes_use:
-            print ('skipping chromosome ' + str(ch), ' not in the use list')
+            print('skipping chromosome ' + str(ch), ' not in the use list')
             continue
         file_out = os.path.join(outdir, 'chromosome_' + str(ch) + '.' + outformat)
         if force is False and os.path.isfile(file_out):
@@ -372,7 +372,7 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
         assert len(nalleles) == 1 and nalleles[0] == 2, \
                "Only biallelic variants are allowed"
         # find duplicate RSIDs within a file
-        if len(set(bgen.rsids)) != len(bgen.rsid):
+        if len(set(bgen.rsids)) != len(bgen.rsids):
             import warnings
             warnings.warn(f'Duplicated RSIDs in file {f}')
             _, iX_unique_rsid_in_file = np.unique(bgen.rsids, 
@@ -406,14 +406,14 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
         # concatenate files
         snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0, 
                             verify_integrity=verify_integrity)
-        tmp = None
 
         # crear probabilites data dictionary
         probs = bgen.read()
-        tmp_probabilites = {k_rsid: (bgen.samples, np.squeeze(probs[:, i, :]))
+        tmp_probabilites = {k_rsid: (np.array(bgen.samples), np.squeeze(probs[:, i, :]))
                             for i, k_rsid in enumerate(tmp.index) }
-
         probabilites.update(tmp_probabilites)
+
+        tmp = None
 
     return snpdata, probabilites
 
@@ -749,7 +749,7 @@ class Genotype():
         return  Genotype(metadata, probabilities) 
 
     @classmethod
-    def from_bgen(files, verify_integrity=False, verbose=True):
+    def from_bgen(cls,files, verify_integrity=False, verbose=True):
         """Read bgen data and return Genotype object with metadata and probabilites
 
         Args:
@@ -766,15 +766,15 @@ class Genotype():
 
     def _validate_arguments(self, meta, prob):
         """check Genotype arguments: 
-        - metadata DataFrame has columns 'CHROM', 'POS', 'ID', 'FORMAT'
+        - metadata DataFrame has columns 'REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'
         - same order of RSID in metadata as probabilities, 
         - probabilities has same dimensions"""
 
-        assert all((col in ['CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)),\
+        assert sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)) >= 6,\
                "Missign columns in metadata" 
         assert list(meta.index) == list(prob.keys()),\
                "Mismatch of RSIDs between metadata and probabilities" 
-        assert all([len(prob[k_key][0]) == prob[k_key][1].shape[0] &
+        assert all([len(prob[k_key][0]) == prob[k_key][1].shape[0] and
                     prob[k_key][1].shape[1] == 3 for k_key in prob.keys()]),\
                 "Mismatch dimensions between samples and probabilities" 
 
