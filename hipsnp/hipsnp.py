@@ -350,7 +350,8 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
     if isinstance(files, str):
         files = [files]
     
-    assert len(files) == len(set(files)), "There are duplicate bgen files" 
+    if len(files) != len(set(files)):
+        raise ValueError("There are duplicated bgen files")
     # make sure that files exist
     for f in files:
         assert os.path.isfile(f)
@@ -375,45 +376,51 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
         if len(set(bgen.rsids)) != len(bgen.rsids):
             import warnings
             warnings.warn(f'Duplicated RSIDs in file {f}')
-            _, iX_unique_rsid_in_file = np.unique(bgen.rsids, 
-                                                  return_index=True)
+            _, iX_unique_in_file = np.unique(bgen.rsids,
+                                             return_index=True)
         else:
-            iX_unique_rsid_in_file = np.arange(len(bgen.rsids))
+            iX_unique_in_file = np.arange(len(bgen.rsids))
         # find duplicates with previous files
         if not snpdata.empty and np.sum(snpdata.index == bgen.rsids) != 0:
             import warnings
             warnings.warn('Files have duplicated RSIDs')
             # indexes with rsids not previously taken
-            unique_rsid_across_files = np.isin(bgen.rsids, snpdata.index,
+            mask_unique_across_files = np.isin(bgen.rsids, snpdata.index,
                                                invert=True)
-            iX_unique_rsid_in_file = (iX_unique_rsid_in_file &
-                                      unique_rsid_across_files)
-
-        # add metadata of unique RSIDS. get REF and ALT
-        tmp = pd.DataFrame(index=bgen.rsids[iX_unique_rsid_in_file])
-        alleles = bgen.allele_ids[iX_unique_rsid_in_file]
-        alleles = np.array([a.split(',') for a in alleles])
-        tmp = tmp.assign(REF=alleles[:, 0], ALT=alleles[:, 1])
-        tmp = tmp.assign(CHROM=bgen.chromosomes[iX_unique_rsid_in_file], 
-                         POS=bgen.positions[iX_unique_rsid_in_file],
-                         ID=bgen.ids[iX_unique_rsid_in_file])
-        tmp['FORMAT'] = 'GP'
-        
-        if f == files[0]:
-            myjoin = 'outer'
+            mask_to_keep = np.zeros(len(bgen.rsids), dtype=np.bool_)
+            mask_to_keep[iX_unique_in_file[mask_unique_across_files]] = True
+            # mask_to_keep[mask_unique_rsid_across_files] = True
         else:
-            myjoin = 'inner'
-        # concatenate files
-        snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0, 
-                            verify_integrity=verify_integrity)
+            mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
 
-        # crear probabilites data dictionary
-        probs = bgen.read()
-        tmp_probabilites = {k_rsid: (np.array(bgen.samples), np.squeeze(probs[:, i, :]))
-                            for i, k_rsid in enumerate(tmp.index) }
-        probabilites.update(tmp_probabilites)
+        if any(mask_to_keep):
+            # add metadata of unique RSIDS. get REF and ALT
+            tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
+            alleles = bgen.allele_ids[mask_to_keep]
+            alleles = np.array([a.split(',') for a in alleles])
+            tmp = tmp.assign(REF=alleles[:, 0], ALT=alleles[:, 1])
+            tmp = tmp.assign(CHROM=bgen.chromosomes[mask_to_keep],
+                             POS=bgen.positions[mask_to_keep],
+                             ID=bgen.ids[mask_to_keep])
+            tmp['FORMAT'] = 'GP'
+            
+            if f == files[0]:
+                myjoin = 'outer'
+            else:
+                myjoin = 'inner'
+            # concatenate files
+            snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0, 
+                                verify_integrity=verify_integrity)
 
-        tmp = None
+            # crear probabilites data dictionary
+            probs = bgen.read()
+            tmp_probabilites = {k_rsid:
+                                (np.array(bgen.samples),
+                                 np.squeeze(probs[:, i, :]))
+                                for i, k_rsid in enumerate(tmp.index) }
+            probabilites.update(tmp_probabilites)
+
+            tmp = None
 
     return snpdata, probabilites
 
@@ -741,11 +748,11 @@ class Genotype():
 
 
         probabilities = dict()
-        for prob_key in probs:
+        for prob_key in probs: # iterate bgen files saved to a dict
             for i, rsid in enumerate(probs[prob_key]['rsids']):
-                if rsid not in probabilities.keys():
-                    probabilities[probs[prob_key][rsid]] = (probs[prob_key]['samples'][i], 
-                                                            np.squeeze(probs[prob_key]['probs'][:, i, :]))
+                if rsid not in probabilities.keys(): 
+                    probabilities[rsid] = (probs[prob_key]['samples'], 
+                                           np.squeeze(probs[prob_key]['probs'][:, i, :]))
         return  Genotype(metadata, probabilities) 
 
     @classmethod
@@ -770,13 +777,13 @@ class Genotype():
         - same order of RSID in metadata as probabilities, 
         - probabilities has same dimensions"""
 
-        assert sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)) >= 6,\
-               "Missign columns in metadata" 
-        assert list(meta.index) == list(prob.keys()),\
-               "Mismatch of RSIDs between metadata and probabilities" 
-        assert all([len(prob[k_key][0]) == prob[k_key][1].shape[0] and
-                    prob[k_key][1].shape[1] == 3 for k_key in prob.keys()]),\
-                "Mismatch dimensions between samples and probabilities" 
+        if sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)) < 6:
+            raise ValueError("Missign columns in metadata") 
+        if list(meta.index) != list(prob.keys()):
+            raise ValueError("Mismatch of RSIDs between metadata and probabilities")
+        if any([len(prob[k_key][0]) != prob[k_key][1].shape[0] or
+                    prob[k_key][1].shape[1] != 3 for k_key in prob.keys()]):
+            raise ValueError("Mismatch dimensions between samples and probabilities")
 
 
 def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \

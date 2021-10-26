@@ -520,7 +520,7 @@ def test_read_from_bgen():
                                             probs_in_pd=False,
                                             verbose=True)
 
-        Genotype.read_from_bgen(files=bgenFiles, 
+        gen = hps.Genotype.from_bgen_transform(files=bgenFiles, 
                                 rsids_as_index=True, 
                                 no_neg_samples=False, 
                                 join='inner', 
@@ -528,9 +528,11 @@ def test_read_from_bgen():
                                 probs_in_pd=False,
                                 verbose=True)
 
-        assert_frame_equal(snpdata, Genotype.bgenDF)
-        assert np.array_equal(np.squeeze(probsdata['0']['probs']), Genotype.sample_probs[rsids[0]][1])
-        assert np.array_equal(probsdata['0']['samples'], Genotype.sample_probs[rsids[0]][0])
+        assert_frame_equal(snpdata, gen.metadata)
+        assert all([np.array_equal(np.squeeze(probsdata['0']['probs'][:,i,:]), 
+                                  gen.probabilities[rsid][1], equal_nan=True)
+                                  for i, rsid in enumerate(snpdata.index)])
+        assert np.array_equal(probsdata['0']['samples'], gen.probabilities[rsids[0]][0])
 
 
 def test_read_from_bgen_multiple_files():
@@ -565,7 +567,7 @@ def test_read_from_bgen_multiple_files():
                                             probs_in_pd=False,
                                             verbose=True)
 
-        Genotype.read_from_bgen(files=bgenFiles, 
+        gen = hps.Genotype.from_bgen_transform(files=bgenFiles, 
                                 rsids_as_index=True, 
                                 no_neg_samples=False, 
                                 join='inner', 
@@ -573,8 +575,7 @@ def test_read_from_bgen_multiple_files():
                                 probs_in_pd=False,
                                 verbose=True)
 
-        assert_frame_equal(snpdata, Genotype.bgenDF)
+        assert_frame_equal(snpdata, gen.metadata)
         for i in range(nFiles):
-            assert np.array_equal(np.squeeze(probsdata[str(i)]['probs']), Genotype.sample_probs[rsids[0]][1])
-            assert np.array_equal(probsdata[str(i)]['samples'], Genotype.sample_probs[rsids[0]][0])
-
+            assert np.array_equal(np.squeeze(probsdata[str(i)]['probs']), gen.probabilities[rsids[0]][1])
+            assert np.array_equal(probsdata[str(i)]['samples'], gen.probabilities[rsids[0]][0])
