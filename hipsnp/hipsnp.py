@@ -9,7 +9,8 @@ from datalad import api as datalad
 # from alive_progress import alive_it
 import alive_progress 
 from bgen_reader import open_bgen
-
+from pathlib import Path
+from hispnp.utils import warn, raise_error, logger
 
 def get_chromosome(c,
                    datalad_source=None,
@@ -349,78 +350,72 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
     """
     if isinstance(files, str):
         files = [files]
-    
+
     if len(files) != len(set(files)):
-        raise ValueError("There are duplicated bgen files")
+        raise_error("There are duplicated bgen files")
     # make sure that files exist
-    for f in files:
-        assert os.path.isfile(f)
+    if not all([Path(f).is_file() for f in files]):
+        raise_error('bgen file does not exist', FileNotFoundError())
 
     # read all the files
-    if verbose:
-        print('reading ' + str(len(files)) + ' bgen files... ')
-  
+    logger.info(f'Reading {len(files)} bgen files...')
+
     snpdata = pd.DataFrame()
     probabilites = dict()
     for f in alive_progress.alive_it(files):
-        if verbose:
-            print('reading ' + f)
-        bgen = open_bgen(f, verbose=False)
+        logger.info(f'Reading {f}')
+        with open_bgen(f, verbose=False) as bgen:
+            # sanity checks
+            # we can only deal with biallelic variants
+            if np.any(bgen.nalleles != 2):
+                raise_error('Only biallelic variants are allowed')
 
-        # sanity checks
-        # we can only deal with biallelic variants
-        nalleles = np.unique(bgen.nalleles)
-        assert len(nalleles) == 1 and nalleles[0] == 2, \
-               "Only biallelic variants are allowed"
-        # find duplicate RSIDs within a file
-        if len(set(bgen.rsids)) != len(bgen.rsids):
-            import warnings
-            warnings.warn(f'Duplicated RSIDs in file {f}')
-            _, iX_unique_in_file = np.unique(bgen.rsids,
-                                             return_index=True)
-        else:
-            iX_unique_in_file = np.arange(len(bgen.rsids))
-        # find duplicates with previous files
-        if not snpdata.empty and np.sum(snpdata.index == bgen.rsids) != 0:
-            import warnings
-            warnings.warn('Files have duplicated RSIDs')
-            # indexes with rsids not previously taken
-            mask_unique_across_files = np.isin(bgen.rsids, snpdata.index,
-                                               invert=True)
-            mask_to_keep = np.zeros(len(bgen.rsids), dtype=np.bool_)
-            mask_to_keep[iX_unique_in_file[mask_unique_across_files]] = True
-            # mask_to_keep[mask_unique_rsid_across_files] = True
-        else:
-            mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
+            # find duplicate RSIDs within a file
+            _, iX_unique_in_file = np.unique(bgen.rsids, return_index=True)
+            if iX_unique_in_file.shape[0] != bgen.rsids.shape[0]:
+                warn(f'Duplicated RSIDs in file {f}')
 
-        if any(mask_to_keep):
-            # add metadata of unique RSIDS. get REF and ALT
-            tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
-            alleles = bgen.allele_ids[mask_to_keep]
-            alleles = np.array([a.split(',') for a in alleles])
-            tmp = tmp.assign(REF=alleles[:, 0], ALT=alleles[:, 1])
-            tmp = tmp.assign(CHROM=bgen.chromosomes[mask_to_keep],
-                             POS=bgen.positions[mask_to_keep],
-                             ID=bgen.ids[mask_to_keep])
-            tmp['FORMAT'] = 'GP'
-            
-            if f == files[0]:
-                myjoin = 'outer'
+            # find duplicates with previous files
+            if not snpdata.empty and np.sum(snpdata.index == bgen.rsids) != 0:
+                warn(f'Files have duplicated RSIDs')
+                # indexes with rsids not previously taken
+                mask_unique_btwb_files = np.isin(bgen.rsids, snpdata.index,
+                                                 invert=True)
+                mask_to_keep = np.zeros(len(bgen.rsids), dtype=np.bool_)
+                mask_to_keep[iX_unique_in_file[mask_unique_btwb_files]] = True
             else:
-                myjoin = 'inner'
-            # concatenate files
-            snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0, 
-                                verify_integrity=verify_integrity)
+                mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
 
-            # crear probabilites data dictionary
-            probs = bgen.read()
-            tmp_probabilites = {k_rsid:
-                                (np.array(bgen.samples),
-                                 np.squeeze(probs[:, i, :]))
-                                for i, k_rsid in enumerate(tmp.index) }
-            probabilites.update(tmp_probabilites)
+            if any(mask_to_keep):
+                # get REF and ALT
+                alleles = bgen.allele_ids[mask_to_keep]
+                alleles = np.array([a.split(',') for a in alleles])
+                # dataframe with metadata of unique RSIDS.
+                tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
+                tmp = tmp.assign(REF=alleles[:, 0],
+                                 ALT=alleles[:, 1],
+                                 CHROM=bgen.chromosomes[mask_to_keep],
+                                 POS=bgen.positions[mask_to_keep],
+                                 ID=bgen.ids[mask_to_keep],
+                                 FORMAT='GP')
 
-            tmp = None
+                if f == files[0]:
+                    myjoin = 'outer'
+                else:
+                    myjoin = 'inner'
+                # concatenate metadata of files
+                snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0,
+                                    verify_integrity=verify_integrity)
+
+                # crear probabilites data dictionary
+                probs = bgen.read()
+                tmp_probabilites = {k_rsid:
+                                    (np.array(bgen.samples),
+                                     np.squeeze(probs[:, i, :]))
+                                    for i, k_rsid in enumerate(tmp.index) }
+                probabilites.update(tmp_probabilites)
+
+                tmp = None
 
     return snpdata, probabilites
 
