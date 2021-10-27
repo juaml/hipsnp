@@ -779,7 +779,7 @@ class Genotype():
 
         if sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)) < 6:
             raise ValueError("Missign columns in metadata") 
-        if list(meta.index) != list(prob.keys()):
+        if sorted(meta.index) != sorted(prob.keys()):
             raise ValueError("Mismatch of RSIDs between metadata and probabilities")
         if any([len(prob[k_key][0]) != prob[k_key][1].shape[0] or
                     prob[k_key][1].shape[1] != 3 for k_key in prob.keys()]):
