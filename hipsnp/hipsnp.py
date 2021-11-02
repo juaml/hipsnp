@@ -696,8 +696,6 @@ def parse_GTGP(GTGP, format=None):
     return GT, GP
 
 
-
-
 class Genotype():
     """Genotype probabilities and metadata
     """
@@ -895,37 +893,25 @@ def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
     if not isinstance(gen, Genotype()):
         raise_error(f'gen is not a Genotype object')
 
-    if samples is None:
-        logger.info('no samples specified, using all')
-        # if probs is None:
-        #     samples = [snpdata.columns[i] for i in range(9, ncol)]
-        # else:
-        #     pkeys = list(probs.keys())
-        #     samples = probs[pkeys[0]]['samples']
-        #     for pk in range(1, len(pkeys)):
-        #         samples = np.append(samples, probs[pkeys[pk]]['samples'])
-        #         samples = np.unique(samples)
-        pkeys = list(gen.sample_probs.keys())
-        # samples = probs[pkeys[0]]['samples']
-        samples = gen.sample_probs[pkeys[0]][0] # first element of tuple has all samples
-        for pk in range(1, len(pkeys)):
-            # samples = np.append(samples, probs[pkeys[pk]]['samples'])
-            # samples = np.unique(samples)
-            samples = np.append(samples, gen.sample_probs[pkeys[pk]][0])
-            samples = np.unique(samples)           
-    # else:
-    #     if probs is None:
-    #         assert all(sam in snpdata.columns for sam in samples)
-
-
-    # TODO filter by samples?
-
-    # TODO filter by RSIDS
-
-    if snps is None:
-        # snps = list(snpdata.index)
+    # filter Genotype by user defines rsids and smaples
+    if samples and snps:
+        gen = Filter(gen).by_rsids_and_samples(samples=samples, rsids=snps)
+        logger.info(f'Filtering by Samples and SNPS')
+    elif samples:
+        gen = Filter(gen).by_samples(samples=samples)
+        logger.info(f'no SNPS specified, using all')
+        logger.info(f'Filtering by Samples')
         snps = list(gen.metadata.index)
- 
+    elif snps:
+        gen = Filter(gen).by_rsids(rsids=snps)
+        logger.info(f'no samples specified, using all')
+        logger.info(f'Filtering by SNPS')
+    else:
+        snps = list(gen.metadata.index)
+        logger.info(f'no samples specified, using all')
+        logger.info(f'no SNPS specified, using all')
+    
+    # Read weights
     riskscore = None
     if weights is not None:
         weights = read_weights(weights)
@@ -939,6 +925,19 @@ def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
     logger.info(f'Calculating genotypes for {len(snps)} SNPs and \
                 {len(samples)} samples ... ')
 
+# def GP2dosage(GP, REF, ALT, EA):
+#     assert GP.shape[1] == 3  
+#     if EA == REF:
+#         dosage = GP.iloc[:,1] + 2*GP.iloc[:,0]
+#     elif EA == ALT:
+#         dosage = GP.iloc[:,1] + 2*GP.iloc[:,2]
+#     else:
+
+#         print('SNP ' + snp + ' ALT ' + ALT + ' or REF ' + REF + \
+#               'do not match EA ' + EA)
+#         raise
+#     return dosage
+
     for snp in alive_progress.alive_it(snps): # iterate RSIDs
         # get SNP info
         parsing_error = False
@@ -948,23 +947,21 @@ def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
             parsing_error = True
             warn(f'Error parsing REF and ALT in snp {snp}') ## Warning?
         if weights is not None:
-            if len(weights['ea'][weights['rsid'] == snp].values) == 0:
-                raise_error('E')
             EA  = weights['ea'][weights['rsid'] == snp].values
-            if len(EA) == 0: # if len is 0, then GPdosage will raise error 
-                weightSNP = None
-            else:
-                EA = EA[0]
-                if (not isinstance(EA, str)) or len(EA) != 1:
-                    parsing_error = True
-                    warn(f'Error parsing EA in snp {snp}')                       
-                # assert isinstance(EA, str) and len(EA) == 1
+            if len(EA) != 0 and isinstance(EA[0], str) and len(EA[0]) == 1:
                 weightSNP = weights['weight'][weights['rsid'] == snp].values[0]
                 weightSNP = float(weightSNP)
+                EA = EA[0]
+            else:
+                parsing_error = True
+                weightSNP = None
+
         if parsing_error:
+            warn(f'Error parsing EA, REF, or ALT in snp {snp}')                       
             genotype_allele.loc[snp, :] = np.nan
             genotype_012.loc[snp, :] = np.nan
             probability.loc[snp, :] = pd.Series([[np.nan]*3]*len(samples))
+            continue
         
         # get a df with probabilities for all the samples
         GP = None
