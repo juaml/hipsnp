@@ -148,13 +148,13 @@ def test_Genotype__validate_arguments_probability_dimension():
 def test_Filter_options():
     """Test if the filtered out elements are not in the Gentype Object"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    out_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
-                 'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']
-    n_out_rsids = len(out_rsids)
+    keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
+                  'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']
+    n_keep_rsids = len(keep_rsids)
     
-    out_samples = ['sample_001', 'sample_002', 'sample_003', 'sample_004',
-                   'sample_005', 'sample_006', 'sample_007', 'sample_008']
-    n_out_samples = len(out_samples)
+    keep_samples = ['sample_001', 'sample_002', 'sample_003', 'sample_004',
+                    'sample_005', 'sample_006', 'sample_007', 'sample_008']
+    n_keep_samples = len(keep_samples)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset = dl.clone(source=source, path=tmpdir + '/')
@@ -167,53 +167,71 @@ def test_Filter_options():
 
         # Filter by samples, check lentgh of samples and probs, and metadata 
         # content
-        gen_filt_sample = hps.Filter(gen_ref).by_samples(samples=out_samples)
+        gen_filt_sample = hps.Filter(gen_ref).by_samples(samples=keep_samples)
 
         n_filt_samples = np.array([prob[0].shape[0] for prob in
                                    gen_filt_sample.probabilities.values()])
-        n_filt_probs = np.array([prob[0].shape[0] for prob in
+        n_filt_probs = np.array([prob[1].shape[0] for prob in
                                  gen_filt_sample.probabilities.values()])
 
-        assert n_filt_samples == n_filt_probs
-        assert n_filt_samples.shape[0] == n_sample_mock_data - n_out_samples
-        assert n_filt_probs.shape[0] == n_sample_mock_data - n_out_samples
+        assert all(n_filt_samples == n_filt_probs)
+        assert all(n_filt_samples == n_keep_samples)
+        assert all(n_filt_probs == n_keep_samples)
         assert gen_ref.metadata.equals(gen_filt_sample.metadata)
+        # there should be no changes to RSID
+        assert len(gen_filt_sample.metadata.index) == n_rsid_mock_data
+        assert len(gen_filt_sample.probabilities) == n_rsid_mock_data
+        assert gen_filt_sample.metadata.equals(gen_ref.metadata)
 
-        gen_filt_rsid = hps.Filter(gen_ref).by_rsids(rsids=out_rsids)
+        gen_filt_rsid = hps.Filter(gen_ref).by_rsids(rsids=keep_rsids)
 
         n_filt_samples = np.array([prob[0].shape[0] for prob in
                                    gen_filt_rsid.probabilities.values()])
-        n_filt_probs = np.array([prob[0].shape[0] for prob in
+        n_filt_probs = np.array([prob[1].shape[0] for prob in
                                  gen_filt_rsid.probabilities.values()])
-      
+    
         # There should be no changes to samples
-        assert n_filt_samples == n_filt_probs
-        assert n_filt_samples.shape[0] == n_sample_mock_data
-        assert n_filt_probs.shape[0] == n_sample_mock_data
-        # RSIDs filterd out form metadata and probabilites
-        assert n_rsid_mock_data ==\
-               gen_filt_rsid.metadata.index.shape[0] + n_out_rsids
-        assert n_rsid_mock_data ==\
-               len(gen_filt_rsid.prprobabilities.keys()) + n_out_rsids
+        assert all(n_filt_samples == n_filt_probs)
+        assert all(n_filt_samples == n_sample_mock_data)
+        assert all(n_filt_probs == n_sample_mock_data)
 
-        assert not any(np.isin(gen_filt_rsid.index, out_rsids ))
-        assert any(np.isin(gen_ref.index, out_rsids ))
-        assert not any([k_rsid in out_rsids for k_rsid in
-                        gen_filt_rsid.probabilities.keys()])
+        # RSIDs filterd out form metadata and probabilites
+        assert n_keep_rsids == gen_filt_rsid.metadata.index.shape[0] 
+        assert n_keep_rsids == len(gen_filt_rsid.probabilities.keys())
+
+        assert all(np.isin(gen_filt_rsid.metadata.index, keep_rsids ))
+        assert any(np.isin(gen_ref.metadata.index, keep_rsids ))
+        assert all([k_rsid in keep_rsids for k_rsid in
+                    gen_filt_rsid.probabilities.keys()])
 
         # linearity of filters
         gen_filt_rsid_from_sample =\
-            hps.Filter(gen_filt_sample).by_rsids(rsids=out_rsids)
+            hps.Filter(gen_filt_sample).by_rsids(rsids=keep_rsids)
 
         gen_filt_sample_from_rsid =\
-            hps.Filter(gen_filt_rsid).by_samples(sampples=out_samples)
+            hps.Filter(gen_filt_rsid).by_samples(samples=keep_samples)
 
         gen_filt_rsid_and_sample = hps.Filter(gen_ref).by_rsids_and_samples(
-            rsids=out_rsids, samples=out_samples)
+            rsids=keep_rsids, samples=keep_samples)
 
         # assert are the same
 
+        assert gen_filt_rsid_from_sample.metadata.equals(
+               gen_filt_rsid_and_sample.metadata)
+        assert gen_filt_sample_from_rsid.metadata.equals(
+               gen_filt_rsid_and_sample.metadata)
 
+        for v1, v2 in zip(gen_filt_rsid_from_sample.probabilities.values(),
+                          gen_filt_rsid_and_sample.probabilities.values()):
+            assert all(v1[0] == v2[0]) and all(v1[0] == v2[0])
+
+        assert all([all(v1[0] == v2[0]) and all(v1[0] == v2[0]) for v1, v2
+                    in zip(gen_filt_rsid_from_sample.probabilities.values(),
+                           gen_filt_rsid_and_sample.probabilities.values())])
+
+        assert all([all(v1[0] == v2[0]) and all(v1[0] == v2[0]) for v1, v2
+                    in zip(gen_filt_sample_from_rsid.probabilities.values(),
+                           gen_filt_rsid_and_sample.probabilities.values())])
 
 
 

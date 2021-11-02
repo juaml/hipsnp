@@ -838,7 +838,7 @@ class Filter():
         samples = np.array(samples)
 
         probs_filtered = dict()
-        for k_rsid, s_prob in self.gen.probabilites.items():
+        for k_rsid, s_prob in self.gen.probabilities.items():
             mask_samples = np.isin(s_prob[0], samples)
             if mask_samples.any(): # RSID has at least one of the samples
                 probs_filtered[k_rsid] = (s_prob[0][mask_samples],
