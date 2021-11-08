@@ -833,70 +833,77 @@ class Genotype():
         # TODO:
         # - Filter only the intersecion of samples
         # - Reorder the tuples elements so all the samples have the same order
-        pass
+        prob_matrix, consol_gen = self._get_intersection_reorder_probablities()
+        return prob_matrix, consol_gen
 
-    def sample_intersection_reorder(gen):
-        # sampleID = dict.fromkeys(gen._probabilities.keys(), [])
+    def _get_intersection_reorder_probablities(self):
         sampleID = {}
         least_samples_rsid = 'RSID_X'
         least_n_samples = np.inf
-        for key_rsid, val_rsid in gen._probabilities.items():
+        for key_rsid, val_rsid in self._probabilities.items():
             # tmp_samplesID = []
             try:
                 tmp_samplesID = [int(sample[7:]) for sample in val_rsid[0]]
             except ValueError:
-                print('Error on Sample indetifier')
-                # raise_error(f'Wrong Sample indentifier')
+                raise_error(f'Wrong Sample indentifier')
 
-            # Chek that sample IDs are unique fro an RSID
-            tmp_n_samples = len(tmp_samplesID)
+            tmp_n_unique_samples = len(set(tmp_samplesID))
+            # Chek that sample IDs are unique within an RSID
+            if tmp_n_unique_samples < len(tmp_samplesID):
+                warn(f'three are duplicated sample IDs in one RSID\
+                        , one will be removed')
+                sampleID[key_rsid] = np.unique(tmp_samplesID)
+            else:
+                sampleID[key_rsid] = np.array(tmp_samplesID)
 
-            if len(set(tmp_samplesID)) < tmp_n_samples:
-                print('There are duplicated samples')
-                # warn(f'three are duplicated sample IDs in one RSID\
-                #         , one will be removed')
-        
             # keep track of the RSID with the least number of samples
-            if tmp_n_samples < least_n_samples:
+            if tmp_n_unique_samples < least_n_samples:
                 least_samples_rsid = key_rsid
-                least_n_samples = tmp_n_samples
-
-            sampleID[key_rsid] = np.array(tmp_samplesID)
+                least_n_samples = tmp_n_unique_samples
 
         # use RSID with the least number of samples to rearange all other RSIDs
-        prob_consolidtd = {}
+        consol_prob_dict = {}
         ref_samples_ID = sampleID[least_samples_rsid]
-        ref_samples_str = gen._probabilities[least_samples_rsid][0]
+        ref_samples_str =\
+            # The IDs cannot be used as indexes
+            self.probabilities[least_samples_rsid][0][ref_samples_ID]
 
-        consol_sampl_prob = np.zeros((len(gen._probabilities),
-                                    ref_samples_ID.shape[0],
-                                    3))
-        for i, dict_prob in enumerate(gen._probabilities.items()):
-            # intersection reference RSID (least samples) with each of other RSIDs 
+        consol_prob_matrix = np.zeros((len(self._probabilities),  # RSIDs
+                                       ref_samples_ID.shape[0],   # Samples
+                                       3))                        # 3 probabil.
+        idx_not_consolidated  = []
+        rsid_not_consolidated = []
+        for i, dict_prob in enumerate(self._probabilities.items()):
+            # intersection reference RSID (has the least number of samples)
+            #  with each of other RSIDs
             _, _, consol_idx = np.intersect1d(ref_samples_ID,
-                                            sampleID[dict_prob[0]],
-                                            assume_unique=True,
-                                            return_indices=True)
-            prob_consolidtd[dict_prob[0]] = (ref_samples_str,
-                                            dict_prob[1][1][consol_idx, :])
-            consol_sampl_prob[i, :, :] = prob_consolidtd[dict_prob[0]][1]
-
-        return consol_sampl_prob, prob_consolidtd
-
-                    
-                    
-
-
-
-    def list_sample_head(spl):
-        return all([s[:7] == 'sample_' for s in spl])
-
-    def list_sample_head2(spl):
-        return all([s[:7] for s in spl] == 'sample_')
-
-    def array_sample_head(spl):
-        return all(np.char.startswith((spl, 'sample_')))
-        
+                                              sampleID[dict_prob[0]],
+                                              assume_unique=True,
+                                              return_indices=True)
+            if consol_idx.shape[0] > 0:
+                consol_prob_dict[dict_prob[0]] = (ref_samples_str,
+                                                  dict_prob[1][1]
+                                                  [consol_idx, :])
+                consol_prob_matrix[i, :, :] = consol_prob_dict[dict_prob[0]][1]
+            else:
+                warn(f'RSID {dict_prob[0]} cannot be consolidated as it has not\
+                     matching samples with other RSIDs')
+                idx_not_consolidated.append(i)
+                rsid_not_consolidated.append(dict_prob[0])
+                 
+        # Adjust metadata and matrix of probabilites for not consolidated RSIDs
+        if len(idx_not_consolidated) > 0:
+            consol_prob_matrix = np.delete(consol_prob_matrix,
+                                           idx_not_consolidated, axis=0)
+            meta_cosolidated = self._metadata.drop(index=rsid_not_consolidated)
+            out_Genotype = Genotype(metadata=meta_cosolidated,
+                                    probabilities=consol_prob_dict)
+            out_Genotype._consolidated = True
+        else:
+            out_Genotype = Genotype(metadata=self._metadata,
+                                    probabilities=consol_prob_dict)
+            out_Genotype._consolidated = True
+        return consol_prob_matrix, out_Genotype
 
     @staticmethod
     def from_bgen_transform(files, rsids_as_index=True, no_neg_samples=False, \
@@ -931,7 +938,7 @@ class Genotype():
                 if rsid not in probabilities.keys():
                     probabilities[rsid] = (probs[prob_key]['samples'], 
                                            np.squeeze(probs[prob_key]['probs'][:, i, :]))
-        return  Genotype(metadata, probabilities)
+        return Genotype(metadata, probabilities)
 
     @staticmethod
     def from_bgen(files, verify_integrity=False, verbose=True):

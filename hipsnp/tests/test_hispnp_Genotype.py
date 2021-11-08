@@ -147,6 +147,7 @@ def test_Genotype__validate_arguments_probability_dimension():
 
 def test_Filter_options():
     """Test if the filtered out elements are not in the Gentype Object"""
+    #TODO: update test to Filter within Genotype object
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
                   'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']
@@ -234,9 +235,140 @@ def test_Filter_options():
                            gen_filt_rsid_and_sample.probabilities.values())])
 
 
+def test_consolidate_Genotype():
+    ''' Samples are reordered in dictionary and probabilites matrix, RIDS are
+    removed if not matching smples with other RSIDS, wrong Sample ID. '''
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        print(tmpdir + '/')
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen_ref = hps.Genotype.from_bgen(files=bgenfile)
+    gen_mod = copy.deepcopy((gen_ref))
 
+    # Test 2 #
+    # Randomize samples in one RSID
+    # ------ #
 
+    rand_idx = np.arange(500)
+    np.random.shuffle(rand_idx)
+    tmp_tuple_rsid = (gen_ref._probabilities['RSID_3'][0][rand_idx],
+                      gen_ref._probabilities['RSID_3'][1][rand_idx, :])
+    gen_mod._probabilities['RSID_3'] = tmp_tuple_rsid
+    prob3D, gen_consol = gen_mod.consolidate()
 
+    # check that mock data manipulation is effective
+    assert any([any(s_ref[0] != s_mod[0]) for s_ref, s_mod in
+                zip(gen_ref.probabilities.values(),
+                    gen_mod.probabilities.values())])
+    
+    assert any([np.nansum(p_ref[1] - p_mod[1]) != 0
+                for p_ref, p_mod in
+                zip(gen_ref.probabilities.values(),
+                    gen_mod.probabilities.values())])
 
+    # consolideted data 
+    # same metadata
+    assert gen_ref.metadata.equals(gen_consol.metadata)
+    # sample IDs are rearranged
+    assert all([all(s_ref[0] == s_cons[0]) for s_ref, s_cons in
+                zip(gen_ref.probabilities.values(),
+                    gen_consol.probabilities.values())])
+    # probabilites are rearranged
+    assert all([np.nansum(p_ref[1] - p_cons[1]) == 0
+                for p_ref, p_cons in
+                zip(gen_ref.probabilities.values(),
+                    gen_consol.probabilities.values())])
+    # probability mtrix is rearranged
+    assert all([np.nansum(p_ref[1] - np.squeeze(prob3D[i, :, :])) == 0
+                for i, p_ref in
+                enumerate(gen_ref.probabilities.values())])
+    
+    # Test 2 #
+    # shorten the number of samples in one RSDI and randomize another
+    # ------ #
+    n_samples = 150
+    tmp_tuple_rsid = (gen_ref._probabilities['RSID_2'][0][:n_samples],
+                      gen_ref._probabilities['RSID_2'][1][:n_samples, :])
+    gen_mod._probabilities['RSID_2'] = tmp_tuple_rsid
+    prob3D, gen_consol = gen_mod.consolidate()
 
+    # consolideted data
+    # same metadata
+    assert gen_ref.metadata.equals(gen_consol.metadata)
+    # number of samples is
+    # sample IDs are rearranged
+    assert all([all(s_ref[0][:n_samples] == s_cons[0]) for s_ref, s_cons in
+                zip(gen_ref.probabilities.values(),
+                    gen_consol.probabilities.values())])
+    # probabilites are rearranged
+    assert all([np.nansum(p_ref[1][:n_samples, :] - p_cons[1]) == 0
+                for p_ref, p_cons in
+                zip(gen_ref.probabilities.values(),
+                    gen_consol.probabilities.values())])
+    # probability mtrix is rearranged
+    assert all([np.nansum(p_ref[1][:n_samples, :] - np.squeeze(prob3D[i, :, :])) == 0
+                for i, p_ref in
+                enumerate(gen_ref.probabilities.values())])
+    
+    # number of samples is n_samples
+    assert prob3D.shape[1] == n_samples
+    assert all([(p_sample[0].shape[0] == n_samples and 
+                 p_sample[1].shape[0] == n_samples)
+                for p_sample in gen_consol.probabilities.values()])
 
+    # Test 3 #
+    # Wrong sample names
+    # ------ #
+    bad_sample = ['X' + s for s in gen_ref._probabilities['RSID_4'][0]]
+    tmp_tuple_rsid = (bad_sample,
+                      gen_ref._probabilities['RSID_4'][1])
+    gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
+    with pytest.raises(ValueError):
+        gen_mod.consolidate()
+
+    bad_sample = [s + 'X' for s in gen_ref._probabilities['RSID_4'][0]]
+    tmp_tuple_rsid = (bad_sample,
+                      gen_ref._probabilities['RSID_4'][1])
+    gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
+    with pytest.raises(ValueError):
+        gen_mod.consolidate()
+
+    # Test 4 #
+    # Duplicated sample in one RSID
+    # ------ #
+    gen_mod = copy.deepcopy(gen_ref)
+    n_samples = 499
+    dopple_sample = gen_ref._probabilities['RSID_4'][0]
+    dopple_sample[0] = dopple_sample[1]
+    tmp_tuple_rsid = (dopple_sample,
+                      gen_ref._probabilities['RSID_4'][1])
+    gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
+
+    prob3D, gen_consol = gen_mod.consolidate()
+    
+    # number of samples is n_samples
+    assert prob3D.shape[1] == n_samples
+    assert all([(p_sample[0].shape[0] == n_samples and 
+                 p_sample[1].shape[0] == n_samples)
+                for p_sample in gen_consol.probabilities.values()])
+    
+    # Test 5 #
+    # Samples in one RSID cannot be consolidated
+    # ------ #
+    odd_rsid = 'RSID_5'
+    n_rsid = 198
+    other_samples = [s[:7] + '1' + s[8:] for s in
+                     gen_ref._probabilities[odd_rsid][0]]
+    tmp_tuple_rsid = (other_samples,
+                      gen_ref._probabilities[odd_rsid][1])
+    gen_mod._probabilities[odd_rsid] = tmp_tuple_rsid
+
+    prob3D, gen_consol = gen_mod.consolidate()
+    # RSID_5 missing
+    assert odd_rsid not in gen_consol.metadata.index
+    assert gen_consol.metadata.shape[0] == n_rsid
+    assert len(gen_consol.probabilities) == n_rsid
+    assert odd_rsid not in gen_consol.probabilities.keys()
+    assert prob3D.shape[0] == n_rsid
