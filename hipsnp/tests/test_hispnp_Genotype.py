@@ -245,9 +245,12 @@ def test_consolidate_Genotype():
         dataset.get()
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
         gen_ref = hps.Genotype.from_bgen(files=bgenfile)
+    
+    prob3D_ref, gen_consol_ref = gen_ref.consolidate()
+    
     gen_mod = copy.deepcopy((gen_ref))
 
-    # Test 2 #
+    # Test 1 #
     # Randomize samples in one RSID
     # ------ #
 
@@ -335,40 +338,47 @@ def test_consolidate_Genotype():
     with pytest.raises(ValueError):
         gen_mod.consolidate()
 
-    # Test 4 #
-    # Duplicated sample in one RSID
-    # ------ #
-    gen_mod = copy.deepcopy(gen_ref)
-    n_samples = 499
-    dopple_sample = gen_ref._probabilities['RSID_4'][0]
-    dopple_sample[0] = dopple_sample[1]
-    tmp_tuple_rsid = (dopple_sample,
-                      gen_ref._probabilities['RSID_4'][1])
-    gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
 
-    prob3D, gen_consol = gen_mod.consolidate()
-    
-    # number of samples is n_samples
-    assert prob3D.shape[1] == n_samples
-    assert all([(p_sample[0].shape[0] == n_samples and 
-                 p_sample[1].shape[0] == n_samples)
-                for p_sample in gen_consol.probabilities.values()])
-    
-    # Test 5 #
+    # Test 4 #
     # Samples in one RSID cannot be consolidated
     # ------ #
+    gen_mod = copy.deepcopy((gen_ref))
     odd_rsid = 'RSID_5'
     n_rsid = 198
-    other_samples = [s[:7] + '1' + s[8:] for s in
-                     gen_ref._probabilities[odd_rsid][0]]
+    other_samples = np.array([s[:7] + '10' + s[7:] for s in
+                              gen_ref._probabilities[odd_rsid][0]])
     tmp_tuple_rsid = (other_samples,
                       gen_ref._probabilities[odd_rsid][1])
     gen_mod._probabilities[odd_rsid] = tmp_tuple_rsid
 
     prob3D, gen_consol = gen_mod.consolidate()
-    # RSID_5 missing
-    assert odd_rsid not in gen_consol.metadata.index
-    assert gen_consol.metadata.shape[0] == n_rsid
-    assert len(gen_consol.probabilities) == n_rsid
-    assert odd_rsid not in gen_consol.probabilities.keys()
+
     assert prob3D.shape[0] == n_rsid
+    assert gen_consol.metadata.shape[0] == n_rsid
+    assert odd_rsid not in gen_consol.metadata.index
+    assert odd_rsid not in gen_consol.probabilities.keys()
+
+    # Test 5 #
+    # Duplicated sample(s) in one RSID
+    # ------ #
+    gen_mod = copy.deepcopy(gen_ref)
+    odd_rsid = 'RSID_4'
+    dopple_sample = gen_ref._probabilities[odd_rsid][0]
+    dopple_sample[0] = dopple_sample[1]
+    tmp_tuple_rsid = (dopple_sample,
+                      gen_ref._probabilities[odd_rsid][1])
+    gen_mod._probabilities[odd_rsid] = tmp_tuple_rsid
+
+    with pytest.raises(ValueError):
+        gen_mod.consolidate()
+
+    gen_mod = copy.deepcopy(gen_ref)
+    odd_rsid = 'RSID_5'
+    other_samples = np.array([s[:7] + '1' + s[8:] for s in
+                              gen_ref._probabilities[odd_rsid][0]])
+    tmp_tuple_rsid = (other_samples,
+                      gen_ref._probabilities[odd_rsid][1])
+    gen_mod._probabilities[odd_rsid] = tmp_tuple_rsid
+
+    with pytest.raises(ValueError):
+        gen_mod.consolidate()

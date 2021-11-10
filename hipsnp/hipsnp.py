@@ -833,64 +833,69 @@ class Genotype():
         # TODO:
         # - Filter only the intersecion of samples
         # - Reorder the tuples elements so all the samples have the same order
-        prob_matrix, consol_gen = self._get_intersection_reorder_probablities()
+        self._validate_samples_and_get_IDs(self.probabilities)
+        prob_matrix, consol_gen = self._consolidate_samples_intersection()
         return prob_matrix, consol_gen
 
-    def _get_intersection_reorder_probablities(self):
-        sampleID = {}
-        least_samples_rsid = 'RSID_X'
-        least_n_samples = np.inf
-        for key_rsid, val_rsid in self._probabilities.items():
-            # tmp_samplesID = []
+    def _validate_samples_and_get_IDs(self, prob):
+        """"Get the ID number of each sample and check that there no duplicated
+        samlpes within an RSID. Though an error there are duplicates samples or 
+        the digits of a sample cannot converted to integers. Adds to atributes
+        to Genotype: the IDs of the samples per RSID and number of samples on 
+        each RSID"""
+        #TODO: should this method be called on the validation of Genotype 
+        # creation arguments of right before consolidation
+        # self._samples_ID = {}
+        # self._n_samples = {}
+
+        self._samples_ID = {}
+        self._n_samples = {}
+        for key_rsid, val_rsid in prob.items():
             try:
                 tmp_samplesID = [int(sample[7:]) for sample in val_rsid[0]]
             except ValueError:
                 raise_error(f'Wrong Sample indentifier')
+            
+            if len(set(tmp_samplesID)) < len(val_rsid[0]):
+                raise_error(f'There are duplicated samples in {key_rsid}')
+            
+            self._samples_ID[key_rsid] = np.array(tmp_samplesID)
+            self._n_samples[key_rsid] = len(tmp_samplesID)
 
-            tmp_n_unique_samples = len(set(tmp_samplesID))
-            # Chek that sample IDs are unique within an RSID
-            if tmp_n_unique_samples < len(tmp_samplesID):
-                warn(f'three are duplicated sample IDs in one RSID\
-                        , one will be removed')
-                sampleID[key_rsid] = np.unique(tmp_samplesID)
-            else:
-                sampleID[key_rsid] = np.array(tmp_samplesID)
+        # least_samples_rsid
 
-            # keep track of the RSID with the least number of samples
-            if tmp_n_unique_samples < least_n_samples:
-                least_samples_rsid = key_rsid
-                least_n_samples = tmp_n_unique_samples
-
+    def _consolidate_samples_intersection(self):
+        """Returns a 3D matrix of probabilites were all """
         # use RSID with the least number of samples to rearange all other RSIDs
-        consol_prob_dict = {}
-        ref_samples_ID = sampleID[least_samples_rsid]
-        ref_samples_str =\
-            # The IDs cannot be used as indexes
-            self.probabilities[least_samples_rsid][0][ref_samples_ID]
+        
+        # get RSID with the least number of samples
+        least_samples_rsid = min(self._n_samples, key=self._n_samples.get)
 
-        consol_prob_matrix = np.zeros((len(self._probabilities),  # RSIDs
+        consol_prob_dict = {}
+        ref_samples_ID = self._samples_ID[least_samples_rsid]
+        ref_samples_str = self.probabilities[least_samples_rsid][0]
+
+        consol_prob_matrix = np.zeros((len(self.probabilities),  # RSIDs
                                        ref_samples_ID.shape[0],   # Samples
                                        3))                        # 3 probabil.
         idx_not_consolidated  = []
         rsid_not_consolidated = []
-        for i, dict_prob in enumerate(self._probabilities.items()):
-            # intersection reference RSID (has the least number of samples)
-            #  with each of other RSIDs
+        for i, dict_prob in enumerate(self.probabilities.items()):
             _, _, consol_idx = np.intersect1d(ref_samples_ID,
-                                              sampleID[dict_prob[0]],
+                                              self._samples_ID[dict_prob[0]],
                                               assume_unique=True,
                                               return_indices=True)
-            if consol_idx.shape[0] > 0:
+            if consol_idx.shape[0] > 0:  # sucessful consolidation
                 consol_prob_dict[dict_prob[0]] = (ref_samples_str,
                                                   dict_prob[1][1]
                                                   [consol_idx, :])
-                consol_prob_matrix[i, :, :] = consol_prob_dict[dict_prob[0]][1]
+                consol_prob_matrix[i, :, :] =\
+                    consol_prob_dict[dict_prob[0]][1]
             else:
-                warn(f'RSID {dict_prob[0]} cannot be consolidated as it has not\
-                     matching samples with other RSIDs')
+                warn(f'RSID {dict_prob[0]} cannot be consolidated as it has\
+                    not matching samples with other RSIDs')
                 idx_not_consolidated.append(i)
                 rsid_not_consolidated.append(dict_prob[0])
-                 
         # Adjust metadata and matrix of probabilites for not consolidated RSIDs
         if len(idx_not_consolidated) > 0:
             consol_prob_matrix = np.delete(consol_prob_matrix,
@@ -904,6 +909,7 @@ class Genotype():
                                     probabilities=consol_prob_dict)
             out_Genotype._consolidated = True
         return consol_prob_matrix, out_Genotype
+
 
     @staticmethod
     def from_bgen_transform(files, rsids_as_index=True, no_neg_samples=False, \
@@ -980,16 +986,6 @@ class Genotype():
         if any([len(prob[k_key][0]) != prob[k_key][1].shape[0] or
                 prob[k_key][1].shape[1] != 3 for k_key in prob.keys()]):
             raise_error("Mismatch dimensions between samples and probabilities")
-
-    def _validate_samples_and_get_order(prob):
-        # Validate samples as 'sample_' and an integer
-        startOK = all([sample[:7] == 'sample_'
-                      for val_rsid in prob.values()
-                      for sample in val_rsid[0]
-                       ])
-
-        if not startOK:
-            raise_error('String of samples should start with "sample_"')
 
 
 
