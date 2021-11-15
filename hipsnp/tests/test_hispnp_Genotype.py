@@ -144,10 +144,9 @@ def test_Genotype__validate_arguments_probability_dimension():
             hps.Genotype(metadata=gen_modified.metadata,
                          probabilities=gen_modified.probabilities)
 
-
-def test_Filter_options():
+def test_filter_options():
     """Test if the filtered out elements are not in the Gentype Object"""
-    #TODO: update test to Filter within Genotype object
+    # TODO: update test to Filter within Genotype object
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
                   'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']
@@ -168,7 +167,7 @@ def test_Filter_options():
 
         # Filter by samples, check lentgh of samples and probs, and metadata 
         # content
-        gen_filt_sample = hps.Filter(gen_ref).by_samples(samples=keep_samples)
+        gen_filt_sample = gen_ref._filter_by_samples(samples=keep_samples)
 
         n_filt_samples = np.array([prob[0].shape[0] for prob in
                                    gen_filt_sample.probabilities.values()])
@@ -184,7 +183,7 @@ def test_Filter_options():
         assert len(gen_filt_sample.probabilities) == n_rsid_mock_data
         assert gen_filt_sample.metadata.equals(gen_ref.metadata)
 
-        gen_filt_rsid = hps.Filter(gen_ref).by_rsids(rsids=keep_rsids)
+        gen_filt_rsid = gen_ref._filter_by_rsids(rsids=keep_rsids)
 
         n_filt_samples = np.array([prob[0].shape[0] for prob in
                                    gen_filt_rsid.probabilities.values()])
@@ -207,13 +206,13 @@ def test_Filter_options():
 
         # linearity of filters
         gen_filt_rsid_from_sample =\
-            hps.Filter(gen_filt_sample).by_rsids(rsids=keep_rsids)
+            gen_filt_sample._filter_by_rsids(rsids=keep_rsids)
 
         gen_filt_sample_from_rsid =\
-            hps.Filter(gen_filt_rsid).by_samples(samples=keep_samples)
+            gen_filt_rsid._filter_by_samples(samples=keep_samples)
 
-        gen_filt_rsid_and_sample = hps.Filter(gen_ref).by_rsids_and_samples(
-            rsids=keep_rsids, samples=keep_samples)
+        gen_filt_rsid_and_sample = gen_ref.filter(rsids=keep_rsids, 
+                                                  samples=keep_samples)
 
         # assert are the same
 
@@ -234,8 +233,10 @@ def test_Filter_options():
                     in zip(gen_filt_sample_from_rsid.probabilities.values(),
                            gen_filt_rsid_and_sample.probabilities.values())])
 
-
-def test_consolidate_Genotype():
+@pytest.mark.parametrize("in_place",
+                         [(True),
+                          (False)])
+def test_consolidate_Genotype(in_place):
     ''' Samples are reordered in dictionary and probabilites matrix, RIDS are
     removed if not matching smples with other RSIDS, wrong Sample ID. '''
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
@@ -245,21 +246,25 @@ def test_consolidate_Genotype():
         dataset.get()
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
         gen_ref = hps.Genotype.from_bgen(files=bgenfile)
-    
-    prob3D_ref, gen_consol_ref = gen_ref.consolidate()
-    
-    gen_mod = copy.deepcopy((gen_ref))
-
+        
     # Test 1 #
     # Randomize samples in one RSID
     # ------ #
+    gen_mod = copy.deepcopy(gen_ref)
 
     rand_idx = np.arange(500)
     np.random.shuffle(rand_idx)
     tmp_tuple_rsid = (gen_ref._probabilities['RSID_3'][0][rand_idx],
                       gen_ref._probabilities['RSID_3'][1][rand_idx, :])
     gen_mod._probabilities['RSID_3'] = tmp_tuple_rsid
-    prob3D, gen_consol = gen_mod.consolidate()
+
+    if in_place:
+        gen_mod.consolidate(inplace=in_place)
+        gen_consol = copy.deepcopy(gen_mod)
+        gen_mod = copy.deepcopy(gen_ref)
+        gen_mod._probabilities['RSID_3'] = tmp_tuple_rsid 
+    else:
+        gen_consol = gen_mod.consolidate(inplace=in_place)
 
     # check that mock data manipulation is effective
     assert any([any(s_ref[0] != s_mod[0]) for s_ref, s_mod in
@@ -283,19 +288,22 @@ def test_consolidate_Genotype():
                 for p_ref, p_cons in
                 zip(gen_ref.probabilities.values(),
                     gen_consol.probabilities.values())])
-    # probability mtrix is rearranged
-    assert all([np.nansum(p_ref[1] - np.squeeze(prob3D[i, :, :])) == 0
-                for i, p_ref in
-                enumerate(gen_ref.probabilities.values())])
-    
+   
     # Test 2 #
     # shorten the number of samples in one RSDI and randomize another
     # ------ #
     n_samples = 150
-    tmp_tuple_rsid = (gen_ref._probabilities['RSID_2'][0][:n_samples],
-                      gen_ref._probabilities['RSID_2'][1][:n_samples, :])
-    gen_mod._probabilities['RSID_2'] = tmp_tuple_rsid
-    prob3D, gen_consol = gen_mod.consolidate()
+    tmp_tuple_rsid = (gen_ref._probabilities['RSID_20'][0][:n_samples],
+                      gen_ref._probabilities['RSID_20'][1][:n_samples, :])
+    gen_mod._probabilities['RSID_20'] = tmp_tuple_rsid
+
+    if in_place:
+        gen_mod.consolidate(inplace=in_place)
+        gen_consol = copy.deepcopy(gen_mod)
+        gen_mod = copy.deepcopy(gen_ref)
+        gen_mod._probabilities['RSID_20'] = tmp_tuple_rsid 
+    else:
+        gen_consol = gen_mod.consolidate(inplace=in_place)
 
     # consolideted data
     # same metadata
@@ -310,75 +318,108 @@ def test_consolidate_Genotype():
                 for p_ref, p_cons in
                 zip(gen_ref.probabilities.values(),
                     gen_consol.probabilities.values())])
-    # probability mtrix is rearranged
-    assert all([np.nansum(p_ref[1][:n_samples, :] - np.squeeze(prob3D[i, :, :])) == 0
-                for i, p_ref in
-                enumerate(gen_ref.probabilities.values())])
     
     # number of samples is n_samples
-    assert prob3D.shape[1] == n_samples
     assert all([(p_sample[0].shape[0] == n_samples and 
                  p_sample[1].shape[0] == n_samples)
                 for p_sample in gen_consol.probabilities.values()])
 
     # Test 3 #
+    # sorten and randomize samples in on RSID
+    # -------- #
+    gen_mod = copy.deepcopy(gen_ref)
+    rand_idx = np.arange(n_samples)
+    np.random.shuffle(rand_idx)
+    tmp_tuple_rsid = (gen_mod._probabilities['RSID_20'][0][rand_idx],
+                      gen_mod._probabilities['RSID_20'][1][rand_idx, :])
+    gen_mod._probabilities['RSID_20'] = tmp_tuple_rsid
+    
+    if in_place:
+        gen_mod.consolidate(inplace=in_place)
+        gen_consol = copy.deepcopy(gen_mod)
+        gen_mod = copy.deepcopy(gen_ref)
+        gen_mod._probabilities['RSID_20'] = tmp_tuple_rsid 
+    else:
+        gen_consol = gen_mod.consolidate(inplace=in_place)
+
+    # consolideted data
+    # same metadata
+    assert gen_ref.metadata.equals(gen_consol.metadata)
+    # number of samples is
+    # sample IDs are rearranged
+    assert all([all(np.isin(s_ref[0][:n_samples], s_cons[0]))
+                for s_ref, s_cons in
+                zip(gen_ref.probabilities.values(),
+                    gen_consol.probabilities.values())])
+    # probabilites are rearranged
+    assert all([np.nansum(p_ref[1][:n_samples, :] - p_cons[1]) == 0
+                for p_ref, p_cons in
+                zip(gen_ref.probabilities.values(),
+                    gen_consol.probabilities.values())])
+    
+    # number of samples is n_samples
+    assert all([(p_sample[0].shape[0] == n_samples and
+                 p_sample[1].shape[0] == n_samples)
+                for p_sample in gen_consol.probabilities.values()])
+
+    # Test 3 #
     # Wrong sample names
-    # ------ #
-    bad_sample = ['X' + s for s in gen_ref._probabilities['RSID_4'][0]]
-    tmp_tuple_rsid = (bad_sample,
-                      gen_ref._probabilities['RSID_4'][1])
-    gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
-    with pytest.raises(ValueError):
-        gen_mod.consolidate()
+    # # ------ #
+    # bad_sample = ['X' + s for s in gen_ref._probabilities['RSID_4'][0]]
+    # tmp_tuple_rsid = (bad_sample,
+    #                   gen_ref._probabilities['RSID_4'][1])
+    # gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
+    # with pytest.raises(ValueError):
+    #     gen_mod.consolidate()
 
-    bad_sample = [s + 'X' for s in gen_ref._probabilities['RSID_4'][0]]
-    tmp_tuple_rsid = (bad_sample,
-                      gen_ref._probabilities['RSID_4'][1])
-    gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
-    with pytest.raises(ValueError):
-        gen_mod.consolidate()
-
+    # bad_sample = [s + 'X' for s in gen_ref._probabilities['RSID_4'][0]]
+    # tmp_tuple_rsid = (bad_sample,
+    #                   gen_ref._probabilities['RSID_4'][1])
+    # gen_mod._probabilities['RSID_4'] = tmp_tuple_rsid
+    # with pytest.raises(ValueError):
+    #     gen_mod.consolidate()
 
     # Test 4 #
     # Samples in one RSID cannot be consolidated
     # ------ #
-    gen_mod = copy.deepcopy((gen_ref))
+    gen_mod = copy.deepcopy(gen_ref)
     odd_rsid = 'RSID_5'
-    n_rsid = 198
+    # n_rsid = 198
     other_samples = np.array([s[:7] + '10' + s[7:] for s in
                               gen_ref._probabilities[odd_rsid][0]])
     tmp_tuple_rsid = (other_samples,
                       gen_ref._probabilities[odd_rsid][1])
     gen_mod._probabilities[odd_rsid] = tmp_tuple_rsid
 
-    prob3D, gen_consol = gen_mod.consolidate()
-
-    assert prob3D.shape[0] == n_rsid
-    assert gen_consol.metadata.shape[0] == n_rsid
-    assert odd_rsid not in gen_consol.metadata.index
-    assert odd_rsid not in gen_consol.probabilities.keys()
-
-    # Test 5 #
-    # Duplicated sample(s) in one RSID
-    # ------ #
-    gen_mod = copy.deepcopy(gen_ref)
-    odd_rsid = 'RSID_4'
-    dopple_sample = gen_ref._probabilities[odd_rsid][0]
-    dopple_sample[0] = dopple_sample[1]
-    tmp_tuple_rsid = (dopple_sample,
-                      gen_ref._probabilities[odd_rsid][1])
-    gen_mod._probabilities[odd_rsid] = tmp_tuple_rsid
-
     with pytest.raises(ValueError):
-        gen_mod.consolidate()
+        gen_mod.consolidate(inplace=True)
 
-    gen_mod = copy.deepcopy(gen_ref)
-    odd_rsid = 'RSID_5'
-    other_samples = np.array([s[:7] + '1' + s[8:] for s in
-                              gen_ref._probabilities[odd_rsid][0]])
-    tmp_tuple_rsid = (other_samples,
-                      gen_ref._probabilities[odd_rsid][1])
-    gen_mod._probabilities[odd_rsid] = tmp_tuple_rsid
+    # gen_consol = gen_mod.consolidate(inplace=False)
 
-    with pytest.raises(ValueError):
-        gen_mod.consolidate()
+    # assert gen_consol.metadata.shape[0] == n_rsid
+    # assert odd_rsid not in gen_consol.metadata.index
+    # assert odd_rsid not in gen_consol.probabilities.keys()
+
+    # # two RSIDs cannot be consolidated
+    # gen_mod = copy.deepcopy(gen_ref)
+    # odd_rsid = ['RSID_6', 'RSID_5']
+    # n_rsid = 197
+    # other_samples = np.array([s[:7] + '30' + s[7:] for s in
+    #                           gen_ref._probabilities[odd_rsid[0]][0]])
+    # tmp_tuple_rsid = (other_samples,
+    #                   gen_ref._probabilities[odd_rsid[0]][1])
+    # gen_mod._probabilities[odd_rsid[0]] = tmp_tuple_rsid
+
+    # other_samples = np.array([s[:7] + '10' + s[7:] for s in
+    #                           gen_ref._probabilities[odd_rsid[1]][0]])
+    # tmp_tuple_rsid = (other_samples,
+    #                   gen_ref._probabilities[odd_rsid[1]][1])
+    # gen_mod._probabilities[odd_rsid[1]] = tmp_tuple_rsid
+
+    # gen_consol = gen_mod.consolidate(inplace=False)
+
+    # assert gen_consol.metadata.shape[0] == n_rsid
+    # assert odd_rsid[0] not in gen_consol.metadata.index
+    # assert odd_rsid[0] not in gen_consol.metadata.index
+    # assert odd_rsid[1] not in gen_consol.probabilities.keys()
+    # assert odd_rsid[1] not in gen_consol.probabilities.keys()

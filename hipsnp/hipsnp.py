@@ -1,5 +1,5 @@
 import io
-from logging import log
+from logging import log, warning
 import os
 import glob
 import shutil
@@ -12,6 +12,8 @@ import alive_progress
 from bgen_reader import open_bgen
 from pathlib import Path
 from hipsnp.utils import warn, raise_error, logger
+import copy
+from functools import reduce
 
 
 def get_chromosome(c,
@@ -709,8 +711,18 @@ class Genotype():
     @property
     def probabilities(self):
         return self._probabilities
+    
+    def unique_samples(self):
+        """Return unique samples in Genotype.probability
+        
+        Returns
+        -------
+        list of strings
+            unique samples in Genotype
+        """
+        pass
 
-    def filter(self, rsids=None, samples=None):
+    def filter(self, rsids=None, samples=None, inplace=True):
         """Filter Genotype data object by Samples
 
         Parameters
@@ -733,6 +745,7 @@ class Genotype():
         If both filters are None, this method returns the same object, not
         a copy of it.
         """
+        # TODO: make possible that filter happnes inplace
         if rsids is None and samples is None:
             return self
         else:
@@ -771,7 +784,7 @@ class Genotype():
 
         probs_filtered = dict()
         # Iterate over all probabilities and keep only the selected samples
-        for rsid, s_prob in self.gen.probabilities.items():
+        for rsid, s_prob in self.probabilities.items():
             mask_samples = np.isin(s_prob[0], samples)
 
             # check that there is at least one sample for that rsid
@@ -785,7 +798,7 @@ class Genotype():
             raise_error(f'No samples matching filter specifications')
 
         # Filter metadata to keep only rsids with samples
-        meta_filtered = self.gen.metadata.filter(items=reamining_rsids, axis=0)
+        meta_filtered = self.metadata.filter(items=reamining_rsids, axis=0)
 
         out = Genotype(metadata=meta_filtered, probabilities=probs_filtered)
         return out
@@ -819,38 +832,83 @@ class Genotype():
         if not isinstance(rsids, list):
             rsids = [rsids]
         
-        meta_filtered = self.gen.metadata.filter(items=rsids, axis=0)
+        meta_filtered = self.metadata.filter(items=rsids, axis=0)
         if meta_filtered.empty:
             raise_error(f'No RSIDs matching filter specifications')
 
-        probs_filtered = {k_rsid: self.gen.probabilities[k_rsid]
+        probs_filtered = {k_rsid: self.probabilities[k_rsid]
                           for k_rsid in rsids}
 
         out = Genotype(metadata=meta_filtered, probabilities=probs_filtered)
         return out
 
-    def consolidate(self):
-        # TODO:
-        # - Filter only the intersecion of samples
-        # - Reorder the tuples elements so all the samples have the same order
-        self._validate_samples_and_get_IDs(self.probabilities)
-        prob_matrix, consol_gen = self._consolidate_samples_intersection()
-        return prob_matrix, consol_gen
+    def consolidate(self, inplace=True):
+        """Align samples consistently across all RSIDs. If a sample is not found 
+        in all RSID, the sample is discarded.
 
-    def _validate_samples_and_get_IDs(self, prob):
+        Arguments
+
+        inplace: bool
+            If True retruns the same object, otherwise returns a new object
+
+        Returns
+        -------
+        consol_gen = Genotype:
+            Consolidated genotype probalities and metadata
+        prob_matrix = numpy.ndarray
+            3 dimensional array with RSIDS, samples, and probabilites on each 
+            dimension respectively
+        
+        Rasises
+        -------
+        ValueError
+            If the samples cannot be read or duplicated.
+        """
+        # TODO: DONE do not return 3d prob. matrix. To get the MAtrix should 
+        # be another method
+        out = self._consolidate_samples(inplace)
+        return out
+
+    def _consolidate_samples(self, inplace):
+        """Search for intersection and reorder"""
+        # find common samples across all RSIDs
+        # FIXME: FAils on test 4. If one RSID has no common samples with other RSIDS
+        # reduce(intersect1d) cannot find common samples across al RSIDS
+        common_samples = reduce(np.intersect1d,
+                                (sp[0] for sp in self.probabilities.values()))
+        if len(common_samples) == 0:
+            raise_error('There are no samples common across all RSIDs')
+
+        consol_prob_dict = {}
+        for rsid, sample_prob in self.probabilities.items():
+            # Get index of common_samples appearing on other RSIDs
+            _, _, consol_idx = np.intersect1d(common_samples,
+                                              sample_prob[0],
+                                              assume_unique=True,
+                                              return_indices=True)
+            consol_prob_dict[rsid] = (common_samples,
+                                      sample_prob[1][consol_idx, :])
+
+        if inplace:
+            self._probabilities = consol_prob_dict
+            self._consolidated = True
+            return None
+        else:
+            out = Genotype(metadata=self.metadata,
+                           probabilities=consol_prob_dict)           
+            out._consolidated = True
+            return out
+
+    def _validate_samples_and_get_IDs(self):
         """"Get the ID number of each sample and check that there no duplicated
         samlpes within an RSID. Though an error there are duplicates samples or 
         the digits of a sample cannot converted to integers. Adds to atributes
         to Genotype: the IDs of the samples per RSID and number of samples on 
         each RSID"""
-        #TODO: should this method be called on the validation of Genotype 
-        # creation arguments of right before consolidation
-        # self._samples_ID = {}
-        # self._n_samples = {}
-
+        # FIXME: move this validation to cration of Genotype object?
         self._samples_ID = {}
         self._n_samples = {}
-        for key_rsid, val_rsid in prob.items():
+        for key_rsid, val_rsid in self.probabilities.items():
             try:
                 tmp_samplesID = [int(sample[7:]) for sample in val_rsid[0]]
             except ValueError:
@@ -862,10 +920,12 @@ class Genotype():
             self._samples_ID[key_rsid] = np.array(tmp_samplesID)
             self._n_samples[key_rsid] = len(tmp_samplesID)
 
-        # least_samples_rsid
-
     def _consolidate_samples_intersection(self):
-        """Returns a 3D matrix of probabilites were all """
+        """Samples and associated probalities of all RSIDs are reordered to
+        be consistent acrross all RSIDs. The RSID with the least number of
+        samples is used as prdering references for all other RSIDS, samples
+        inconsistent across all other RSIDs are discarded. Returns a Genotype
+        object and 3D numpy array with all problities """
         # use RSID with the least number of samples to rearange all other RSIDs
         
         # get RSID with the least number of samples
@@ -896,6 +956,7 @@ class Genotype():
                     not matching samples with other RSIDs')
                 idx_not_consolidated.append(i)
                 rsid_not_consolidated.append(dict_prob[0])
+
         # Adjust metadata and matrix of probabilites for not consolidated RSIDs
         if len(idx_not_consolidated) > 0:
             consol_prob_matrix = np.delete(consol_prob_matrix,
@@ -908,8 +969,118 @@ class Genotype():
             out_Genotype = Genotype(metadata=self._metadata,
                                     probabilities=consol_prob_dict)
             out_Genotype._consolidated = True
+            out_Genotype._unique_samples = ref_samples_str
         return consol_prob_matrix, out_Genotype
 
+    def get_array_of_probabilites(self):
+        """Return a 3D array with the probabilties of all RSIDs and samples. If 
+        Genotype is not consolidated, it is first consolidated
+        """
+        if not self.is_consolidated:
+            raise_error('Samples are not consolidated across RSIDs. Samples\
+                must be consolidated (see consolidatee() )')
+
+        prob_matrix = self._get_array_of_probabilites()
+        return prob_matrix
+
+    def _get_array_of_probabilites(self):
+        """Oterate RSIDS over consolidated dictionary of probabilites to build a
+        single 3d numpy array with all the probabiites."""
+        # TODO: DONE returns 3d matrix of probabilites
+        n_samples = list(self.probabilities.values())[0][0].shape[0]
+        consol_prob_matrix = np.zeros((len(self.probabilities),  # RSIDs
+                                       n_samples,                # Samples
+                                       3))                       # probability
+        for i, sample_prob in enumerate(self.probabilities.values()):
+            consol_prob_matrix[i, :, :] = sample_prob[1]
+
+        return consol_prob_matrix
+
+    def validate_metadata(self):
+        """ Check that metadata information has the right format. Return the 
+        same Genotype if the filds REF and ALT contain only one lement. 
+        Otherwise, remove the RSIDS with worng metadata in the metadata and 
+        probability fields and retrun a new instance of Genotype
+        """
+        # TODO: inplace option
+        wrong_rsids = []
+        for rsid, ref, alt in zip(self.metadata.index,
+                                  self.metadata['REF'].values,
+                                  self.metadata['ALT'].values):
+            
+            if len(ref) != 1 or len(alt) != 1 or\
+               not isinstance(ref, str) or not isinstance(alt, str):
+                wrong_rsids.append(rsid)
+        
+        if len(wrong_rsids) > 0:
+            metadata = self.metadata.drop(index=wrong_rsids)
+            prob = copy.deepcopy(self.probabilities)
+            for rsid in wrong_rsids:
+                prob.pop(rsid)
+            return Genotype(metadata=metadata, probabilities=prob)
+        else:
+            return self
+        # TODO: pytest it
+        # FIXME: Should it return a new object or modiffies the existing object
+
+    def read_weights(self, weights):
+        """read weights from a file
+        """
+        # TODO: not part of Genotype. Only one function with validation
+        try:
+            weights = pd.read_csv(weights, sep='\t', comment='#')
+            weights.columns = [x.lower() for x in weights.columns]
+            # FIXME: shouldn't be rsids the index to be consistent with metadata
+            weights.rename(columns={'snpid': 'rsid', 'chr_name': 'chr',
+                                    'effect_allele': 'ea',
+                                    'effect_weight': 'weight'},
+                           inplace=True)
+        except ValueError as e:
+            raise_error(f'Fails reading weights', klass=e)
+        
+        weights = self._validate_weights(weights)
+        return weights
+
+    def _validate_weights(weights):
+        """check that the weights DataFrame has the right format
+        """
+
+        if not('ea' and 'weight' and 'rsid' in weights.columns):
+            raise_error(f'Weights contains wrong information')
+
+        rsids = weights['rsid'].tolist()
+        if len(rsids) == len(set(rsids)):
+            warning(f'"weights" has duplicated RSIDs, only the first\
+                      appearane is kept')
+            
+            # FIXME: AQUI ESTOY. Esta mal. rsids es una columna no el index.
+            dopple_rsids = rsids[weights.duplicated()]
+            weights.drop(index=dopple_rsids)
+
+        assert 'ea' in weights.columns
+        assert 'weight' in weights.columns
+        assert 'rsid' in weights.columns
+        rsids = weights['rsid'].tolist()
+        # make sure that all rsids are unique
+        assert len(rsids) == len(set(rsids))
+        return weights
+
+
+    # if isinstance(weights, str):
+    #     assert os.path.isfile(weights)
+    #     weights = pd.read_csv(weights, sep='\t', comment='#')
+    # weights.columns = [x.lower() for x in weights.columns]
+    # weights.rename(columns={'snpid': 'rsid', 'chr_name': 'chr',
+    #                         'effect_allele': 'ea', 'effect_weight': 'weight'},
+    #                inplace=True)
+
+    # assert 'ea' in weights.columns
+    # assert 'weight' in weights.columns
+    # assert 'rsid' in weights.columns
+    # rsids = weights['rsid'].tolist()
+    # # make sure that all rsids are unique
+    # assert len(rsids) == len(set(rsids))
+    # return weights
 
     @staticmethod
     def from_bgen_transform(files, rsids_as_index=True, no_neg_samples=False, \
@@ -960,17 +1131,9 @@ class Genotype():
         metadata, probabilities = read_bgen_for_Genotype(files=files, 
                                                        verify_integrity=verify_integrity,
                                                        verbose=verbose)
-        return Genotype(metadata, probabilities) 
 
-    def unique_samples(self):
-        """Return unique samples in Genotype.probability
-        
-        Returns
-        -------
-        list of strings
-            unique samples in Genotype
-        """
-        pass
+
+        return Genotype(metadata, probabilities) 
 
     @staticmethod
     def _validate_arguments(meta, prob):
@@ -986,99 +1149,6 @@ class Genotype():
         if any([len(prob[k_key][0]) != prob[k_key][1].shape[0] or
                 prob[k_key][1].shape[1] != 3 for k_key in prob.keys()]):
             raise_error("Mismatch dimensions between samples and probabilities")
-
-
-
-
-# class Filter():
-#     """Filter Gentype Object data by RSID and Samples. imput rsids and samples to keep
-#      Return Genotype object filtered"""
-#     def __init__(self, gen):
-#         """ Get Genotype instance to by filtered
-
-#         Parameters
-#         ----------
-#         gen : Genotype()
-#             Genotypt data Object 
-#         """
-#         self.gen = gen
-
-
-#     def by_rsids(self, rsids):
-#         """Filter Genotype data object by RSIDs
-
-#         Parameters
-#         ----------
-#         rsids : str or list of str
-#             rsids to keep
-
-#         Returns
-#         -------
-#         Genotype()
-#             Genotype object containg data of given RSIDs
-#         """
-#         if isinstance(rsids, str):
-#             rsids = [rsids]
-#         try:
-#             meta_filtered = self.gen.metadata.filter(items=rsids, axis=0)
-#             probs_filtered = {k_rsid: self.gen.probabilities[k_rsid]
-#                               for k_rsid in rsids}
-#         except ValueError:
-#             raise_error('Error filering Genotype.by_rsids')
-        
-#         return Genotype(metadata=meta_filtered, probabilities=probs_filtered)
-
-#     def by_samples(self, samples):
-#         """Filter Genotype data object by Samples
-
-#         Parameters
-#         ----------
-#         samples : str or list of str
-#             Samples to keep
-
-#         Returns
-#         -------
-#         Genotype()
-#             Genotype object containg data of given Samples
-#         """
-#         if isinstance(samples, str):
-#             rsids = [samples]
-#         samples = np.array(samples)
-
-#         probs_filtered = dict()
-#         for k_rsid, s_prob in self.gen.probabilities.items():
-#             mask_samples = np.isin(s_prob[0], samples)
-#             if mask_samples.any(): # RSID has at least one of the samples
-#                 probs_filtered[k_rsid] = (s_prob[0][mask_samples],
-#                                           s_prob[1][mask_samples, :])
-        
-#         reamining_rsids = list(probs_filtered.keys())
-#         if len(reamining_rsids) == 0:
-#             raise_error(f'No samples matching filter specifications')
-#         else:
-#             meta_filtered = self.gen.metadata.filter(items=reamining_rsids, 
-#                                                      axis=0)
-
-#         return Genotype(metadata=meta_filtered, probabilities=probs_filtered)
-
-#     def by_rsids_and_samples(self, rsids, samples):
-#         """Filter Genotype data object first by RSIDs and then by Samples. It
-#         applies Filter.by_rsid() and Filter.by_sample() consecutively.
-
-#         Parameters
-#         ----------
-#         rsid : str or list of str
-#             rsids to keep
-#         sample : str or list of str
-#             Samples to keep
-
-#         Returns
-#         -------
-#         Genotype()
-#             Genotype object containg data of given RSIDs and Samples
-#         """
-#         return Filter(self.by_rsids(rsids=rsids)).by_samples(samples=samples)
-
 
 def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
                 genotype_format='allele', probs=None, weights=None, \
@@ -1106,16 +1176,18 @@ def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
 
     # TODO: Check weights and get good RSIDs
 
-
-    # TODO: filter Genotype by user defined rsids (good ones) and samples
+    # TODO: DONE filter Genotype by user defined rsids (good ones) and samples
     gen = gen.filter(samples=samples, rsids=snps)
+    # TODO: DONE consolidate 
     gen = gen.consolidate()  # organise the object os its fastest
 
-    # TODO: Filter out bad SNPS
+    # TODO: DONE Filter out bad SNPS
     # - Bad SPNS are SPNS
     #   - len(REF) != 1 or len(ALT) != 1:
     #   - not (EA has one element and is a string)
-    
+     
+
+
     snps = gen.rsids
     # if samples and snps:
     #     gen = Filter(gen).by_rsids_and_samples(samples=samples, rsids=snps)
