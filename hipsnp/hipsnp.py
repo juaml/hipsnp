@@ -729,11 +729,14 @@ class Genotype():
         ----------
         samples : str or list of str | None
             Samples to keep. If None, does not filter (default).
+        inplace: bool
+            If True retruns the same object, otherwise returns a new object
 
         Returns
         -------
-        out = Genotype
-            filtered genotype.
+        Genotype or None:
+            Consolidated genotype probalities and metadata if inplace = False,
+            None if inplace = True
 
         Rasises
         -------
@@ -745,26 +748,30 @@ class Genotype():
         If both filters are None, this method returns the same object, not
         a copy of it.
         """
-        # TODO: make possible that filter happnes inplace
+        # TODO: DONE make possible that filter happnes inplace
         if rsids is None and samples is None:
             return self
         else:
             out = self._filter_by_rsids(
-                rsids=rsids)._filter_by_samples(samples=samples)
+                rsids=rsids, inplace=inplace)._filter_by_samples(
+                    samples=samples, inplace=inplace)
         return out
 
-    def _filter_by_samples(self, samples=None):
+    def _filter_by_samples(self, samples=None, inplace=True):
         """Filter Genotype data object by Samples
 
         Parameters
         ----------
         samples : str or list of str | None
             Samples to keep. If None, does not filter (default).
+        inplace: bool
+            If True retruns the same object, otherwise returns a new object
 
         Returns
         -------
-        out = Genotype
-            filtered genotype
+        Genotype or None:
+            Consolidated genotype probalities and metadata if inplace = False,
+            None if inplace = True
 
         Rasises
         -------
@@ -800,20 +807,30 @@ class Genotype():
         # Filter metadata to keep only rsids with samples
         meta_filtered = self.metadata.filter(items=reamining_rsids, axis=0)
 
-        out = Genotype(metadata=meta_filtered, probabilities=probs_filtered)
-        return out
+        if inplace:
+            self._probabilities = probs_filtered
+            self._metadata = meta_filtered
+            return None
+        else:
+            out = Genotype(metadata=meta_filtered,
+                           probabilities=probs_filtered)
+            return out
 
-    def _filter_by_rsids(self, rsids=None):
+    def _filter_by_rsids(self, rsids=None, inplace=True):
         """Filter Genotype data object by RSID
 
         Parameters
         ----------
         samples : str or list of str | None
             RSIDs to keep. If None, does not filter (default).
+        inplace: bool
+            If True retruns the same object, otherwise returns a new object
 
         Returns
         -------
-        out = Genotype
+        Genotype or None:
+            Filtred genotype probalities and metadata if inplace = False,
+            None if inplace = True
             filtered genotype
 
         Rasises
@@ -839,8 +856,13 @@ class Genotype():
         probs_filtered = {k_rsid: self.probabilities[k_rsid]
                           for k_rsid in rsids}
 
-        out = Genotype(metadata=meta_filtered, probabilities=probs_filtered)
-        return out
+        if inplace:
+            self._probabilities = probs_filtered
+            self._metadata = meta_filtered
+        else:
+            out = Genotype(metadata=meta_filtered,
+                           probabilities=probs_filtered)
+            return out
 
     def consolidate(self, inplace=True):
         """Align samples consistently across all RSIDs. If a sample is not found 
@@ -853,11 +875,10 @@ class Genotype():
 
         Returns
         -------
-        consol_gen = Genotype:
-            Consolidated genotype probalities and metadata
-        prob_matrix = numpy.ndarray
-            3 dimensional array with RSIDS, samples, and probabilites on each 
-            dimension respectively
+        Genotype or None:
+            Consolidated genotype probalities and metadata if inplace = False,
+            None if inplace = True
+
         
         Rasises
         -------
@@ -872,8 +893,6 @@ class Genotype():
     def _consolidate_samples(self, inplace):
         """Search for intersection and reorder"""
         # find common samples across all RSIDs
-        # FIXME: FAils on test 4. If one RSID has no common samples with other RSIDS
-        # reduce(intersect1d) cannot find common samples across al RSIDS
         common_samples = reduce(np.intersect1d,
                                 (sp[0] for sp in self.probabilities.values()))
         if len(common_samples) == 0:
