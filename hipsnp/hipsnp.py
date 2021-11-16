@@ -749,8 +749,13 @@ class Genotype():
         a copy of it.
         """
         # TODO: DONE make possible that filter happnes inplace
+        # TODO: pytest filter
         if rsids is None and samples is None:
             return self
+        if inplace:
+            self._filter_by_rsids(rsids=rsids, inplace=inplace)
+            self._filter_by_samples(samples=samples, inplace=inplace)
+            return None
         else:
             out = self._filter_by_rsids(
                 rsids=rsids, inplace=inplace)._filter_by_samples(

@@ -1,3 +1,4 @@
+from attr.validators import in_
 import pytest
 import hipsnp as hps
 import datalad.api as dl
@@ -144,7 +145,10 @@ def test_Genotype__validate_arguments_probability_dimension():
             hps.Genotype(metadata=gen_modified.metadata,
                          probabilities=gen_modified.probabilities)
 
-def test_filter_options():
+@pytest.mark.parametrize("in_place",
+                         [(True),
+                          (False)])
+def test_filter_options(in_place):
     """Test if the filtered out elements are not in the Gentype Object"""
     # TODO: update test to Filter within Genotype object
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
@@ -167,7 +171,13 @@ def test_filter_options():
 
         # Filter by samples, check lentgh of samples and probs, and metadata 
         # content
-        gen_filt_sample = gen_ref._filter_by_samples(samples=keep_samples)
+
+        if in_place:
+            gen_filt_sample = copy.deepcopy(gen_ref)
+            gen_filt_sample.filter(samples=keep_samples, inplace=in_place)
+        else:
+            gen_filt_sample = gen_ref.filter(samples=keep_samples,
+                                             inplace=in_place)
 
         n_filt_samples = np.array([prob[0].shape[0] for prob in
                                    gen_filt_sample.probabilities.values()])
@@ -183,7 +193,12 @@ def test_filter_options():
         assert len(gen_filt_sample.probabilities) == n_rsid_mock_data
         assert gen_filt_sample.metadata.equals(gen_ref.metadata)
 
-        gen_filt_rsid = gen_ref._filter_by_rsids(rsids=keep_rsids)
+        # filter by RSIds
+        if in_place:
+            gen_filt_rsid = copy.deepcopy(gen_ref)
+            gen_filt_rsid.filter(rsids=keep_rsids, inplace=in_place)
+        else:
+            gen_filt_rsid = gen_ref.filter(rsids=keep_rsids, inplace=in_place)
 
         n_filt_samples = np.array([prob[0].shape[0] for prob in
                                    gen_filt_rsid.probabilities.values()])
@@ -204,34 +219,38 @@ def test_filter_options():
         assert all([k_rsid in keep_rsids for k_rsid in
                     gen_filt_rsid.probabilities.keys()])
 
-        # linearity of filters
-        gen_filt_rsid_from_sample =\
-            gen_filt_sample._filter_by_rsids(rsids=keep_rsids)
+        # filter RSID and Samples
+        if in_place:
+            gen_filt_rsid_and_sample = copy.deepcopy(gen_ref)
+            gen_filt_rsid_and_sample.filter(rsids=keep_rsids,
+                                            samples=keep_samples,
+                                            inplace=in_place)
+        else:
+            gen_filt_rsid_and_sample = gen_ref.filter(rsids=keep_rsids,
+                                                      samples=keep_samples,
+                                                      inplace=in_place)
 
-        gen_filt_sample_from_rsid =\
-            gen_filt_rsid._filter_by_samples(samples=keep_samples)
+        n_filt_samples = np.array([prob[0].shape[0] for prob in
+                            gen_filt_rsid_and_sample.probabilities.values()])
+        n_filt_probs = np.array([prob[1].shape[0] for prob in
+                            gen_filt_rsid_and_sample.probabilities.values()])
 
-        gen_filt_rsid_and_sample = gen_ref.filter(rsids=keep_rsids, 
-                                                  samples=keep_samples)
+        assert all(n_filt_samples == n_filt_probs)
+        assert all(n_filt_samples == n_keep_samples)
+        assert all(n_filt_probs == n_keep_samples)
+        # there are changes to RSID
+        assert len(gen_filt_rsid_and_sample.metadata.index) == n_keep_rsids
+        assert len(gen_filt_rsid_and_sample.probabilities) == n_keep_rsids
 
-        # assert are the same
+        assert n_keep_rsids == gen_filt_rsid_and_sample.metadata.index.shape[0] 
+        assert n_keep_rsids ==\
+            len(gen_filt_rsid_and_sample.probabilities.keys())
 
-        assert gen_filt_rsid_from_sample.metadata.equals(
-               gen_filt_rsid_and_sample.metadata)
-        assert gen_filt_sample_from_rsid.metadata.equals(
-               gen_filt_rsid_and_sample.metadata)
-
-        for v1, v2 in zip(gen_filt_rsid_from_sample.probabilities.values(),
-                          gen_filt_rsid_and_sample.probabilities.values()):
-            assert all(v1[0] == v2[0]) and all(v1[0] == v2[0])
-
-        assert all([all(v1[0] == v2[0]) and all(v1[0] == v2[0]) for v1, v2
-                    in zip(gen_filt_rsid_from_sample.probabilities.values(),
-                           gen_filt_rsid_and_sample.probabilities.values())])
-
-        assert all([all(v1[0] == v2[0]) and all(v1[0] == v2[0]) for v1, v2
-                    in zip(gen_filt_sample_from_rsid.probabilities.values(),
-                           gen_filt_rsid_and_sample.probabilities.values())])
+        assert all(np.isin(gen_filt_rsid_and_sample.metadata.index,
+                           keep_rsids))
+        assert any(np.isin(gen_ref.metadata.index, keep_rsids ))
+        assert all([k_rsid in keep_rsids for k_rsid in
+                    gen_filt_rsid_and_sample.probabilities.keys()])
 
 @pytest.mark.parametrize("in_place",
                          [(True),
