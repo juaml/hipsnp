@@ -150,7 +150,6 @@ def test_Genotype__validate_arguments_probability_dimension():
                           (False)])
 def test_filter_options(in_place):
     """Test if the filtered out elements are not in the Gentype Object"""
-    # TODO: update test to Filter within Genotype object
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
                   'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']

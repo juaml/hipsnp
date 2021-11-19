@@ -461,7 +461,7 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
     return snpdata, probabilites
 
 
-def read_weights(weights):
+def read_weights_old(weights):
     """
     read weights from a file
     """
@@ -479,6 +479,49 @@ def read_weights(weights):
     rsids = weights['rsid'].tolist()
     # make sure that all rsids are unique
     assert len(rsids) == len(set(rsids))
+    return weights
+
+
+def read_weights(weights):
+    """read weights from a .csv file
+
+    Parameters
+    ----------
+    weiths : str
+        Path to the csv file with the weigths.
+
+    Returns
+    -------
+    DataFrame:
+        weigths by RSID
+
+    Rasises
+    -------
+    ValueErthe CSV does not contain reuired fields or infromation is worng
+    """
+    try:
+        weights = pd.read_csv(weights, sep='\t', comment='#')
+        weights.columns = [x.lower() for x in weights.columns]
+        weights.rename(columns={'snpid': 'rsid', 'chr_name': 'chr',
+                                'effect_allele': 'ea',
+                                'effect_weight': 'weight'},
+                       inplace=True)
+        weights.set_index('rsid', inplace=True)
+
+    except ValueError as e:
+        raise_error(f'Fails reading weights', klass=e)
+
+    if not('ea' and 'weight' in weights.columns):
+        raise_error(f'Weights contains wrong column names')
+    
+    if np.sum(weights.index.duplicated()) != 0:
+        warning(f'"weights" has duplicated RSIDs, only the first\
+                    appearane is kept')
+
+    if sum([len(ea) != 1 and isinstance((ea, str))
+            for ea in weights['ea']]) != 0:
+        raise_error(f'Wrong effect_allele in weights')
+
     return weights
 
 
@@ -583,6 +626,7 @@ def snp2genotype(snpdata, th=0.9, snps=None, samples=None,
                         # probs is samples x snps x 3
                         GP = pd.DataFrame(probs_pk, index=index[index_mask],
                                           columns=range(3))
+                        # GP has [samples x 3] dimensionality
                         # keep what we need
                         # todo check if this reorders
                         # GP = GP.reindex(samples).dropna()
@@ -720,7 +764,12 @@ class Genotype():
         list of strings
             unique samples in Genotype
         """
-        pass
+        if not self.is_consolidated:
+            raise_error('Samples are not consolidated across RSIDs. Samples\
+                must be first consolidated (see consolidatee() )')
+
+        uniq_samples = self.probabilities[self.rsids[0]][0]
+        return uniq_samples
 
     def filter(self, rsids=None, samples=None, inplace=True):
         """Filter Genotype data object by Samples
@@ -749,7 +798,7 @@ class Genotype():
         a copy of it.
         """
         # TODO: DONE make possible that filter happnes inplace
-        # TODO: pytest filter
+        # TODO: test what happens if required RSIDS or samples are not in data
         if rsids is None and samples is None:
             return self
         if inplace:
@@ -760,7 +809,7 @@ class Genotype():
             out = self._filter_by_rsids(
                 rsids=rsids, inplace=inplace)._filter_by_samples(
                     samples=samples, inplace=inplace)
-        return out
+            return out
 
     def _filter_by_samples(self, samples=None, inplace=True):
         """Filter Genotype data object by Samples
@@ -923,27 +972,6 @@ class Genotype():
             out._consolidated = True
             return out
 
-    def _validate_samples_and_get_IDs(self):
-        """"Get the ID number of each sample and check that there no duplicated
-        samlpes within an RSID. Though an error there are duplicates samples or 
-        the digits of a sample cannot converted to integers. Adds to atributes
-        to Genotype: the IDs of the samples per RSID and number of samples on 
-        each RSID"""
-        # FIXME: move this validation to cration of Genotype object?
-        self._samples_ID = {}
-        self._n_samples = {}
-        for key_rsid, val_rsid in self.probabilities.items():
-            try:
-                tmp_samplesID = [int(sample[7:]) for sample in val_rsid[0]]
-            except ValueError:
-                raise_error(f'Wrong Sample indentifier')
-            
-            if len(set(tmp_samplesID)) < len(val_rsid[0]):
-                raise_error(f'There are duplicated samples in {key_rsid}')
-            
-            self._samples_ID[key_rsid] = np.array(tmp_samplesID)
-            self._n_samples[key_rsid] = len(tmp_samplesID)
-
     def _consolidate_samples_intersection(self):
         """Samples and associated probalities of all RSIDs are reordered to
         be consistent acrross all RSIDs. The RSID with the least number of
@@ -1017,7 +1045,7 @@ class Genotype():
                                        3))                       # probability
         for i, sample_prob in enumerate(self.probabilities.values()):
             consol_prob_matrix[i, :, :] = sample_prob[1]
-
+        # TODO: unit-test it
         return consol_prob_matrix
 
     def validate_metadata(self):
@@ -1026,7 +1054,7 @@ class Genotype():
         Otherwise, remove the RSIDS with worng metadata in the metadata and 
         probability fields and retrun a new instance of Genotype
         """
-        # TODO: inplace option
+        # TODO: inplace option, move validations to read BGEN
         wrong_rsids = []
         for rsid, ref, alt in zip(self.metadata.index,
                                   self.metadata['REF'].values,
@@ -1047,64 +1075,111 @@ class Genotype():
         # TODO: pytest it
         # FIXME: Should it return a new object or modiffies the existing object
 
-    def read_weights(self, weights):
-        """read weights from a file
+    def filter_by_weigths(self, weights, inplace=True):
+        # match filter RSIDs with RSIDs in Genotype
+        """ Reduce RSIDs to those present in the weigths file. weights should be
+        read with the function read_weights() to make sure that the weigths 
+        variable has the proper form
+
+        Parameters
+        ----------
+        weights : DataFrame
+            Pandas DataFrame with weightis as provided by read_weigts()
+        inplace : bool, optional
+            If True retruns the same object, otherwise returns a new object
+            , by default True
+
+        Returns
+        -------
+        Genotype or None:
+            Genotype with RSIDs matching to weights file if inplace = False,
+            None if inplace = True
+
         """
-        # TODO: not part of Genotype. Only one function with validation
-        try:
-            weights = pd.read_csv(weights, sep='\t', comment='#')
-            weights.columns = [x.lower() for x in weights.columns]
-            # FIXME: shouldn't be rsids the index to be consistent with metadata
-            weights.rename(columns={'snpid': 'rsid', 'chr_name': 'chr',
-                                    'effect_allele': 'ea',
-                                    'effect_weight': 'weight'},
-                           inplace=True)
-        except ValueError as e:
-            raise_error(f'Fails reading weights', klass=e)
-        
-        weights = self._validate_weights(weights)
-        return weights
 
-    def _validate_weights(weights):
-        """check that the weights DataFrame has the right format
+        rsids = weights.index.to_list()
+        if inplace:
+            self._filter_by_rsids(rsids=rsids, inplace=inplace)
+            return None
+        else:
+            out = self._filter_by_rsids(rsids=rsids, inplace=inplace)
+            return out
+        # TODO: unit-test it
+
+    def snp2genotype(self, snpdata, gen, th=0.9, snps=None, samples=None, \
+                     genotype_format='allele', probs=None, weights=None, \
+                     verbose=True, profiler=None):
         """
+        compute the rsok scores for a Genotype 
 
-        if not('ea' and 'weight' and 'rsid' in weights.columns):
-            raise_error(f'Weights contains wrong information')
+        given a snp file path(s) or a pandas df from read_vcf/read_bgen returns genotypes and probabilities
+        snpdata: dataFrame given by read_bgen()
+        snps: ?? if None, list(snpdata.index) -> RSIDS
+        samples: ?? if None, take the samples from probs -> probs['key]['samples']
+                and select only those samples that are unique if len(probs.keys()) > 1 == number of BGEN files read before
+        probs: dictionary with probabilities given by read_bgen() 
+    Genotype has         
+            self.metadata = None
+            self.probabilities = dict()
+        returns: pd dataframses with everything concatenated?
+        """
+        # TODO: uinit test it
+        if weights is not None:
+            w = read_weights(weights)
+            self.filter_by_weigths(w, inplace=True)
+ 
+        self.filter(samples=samples, rsids=snps, inplace=True)
 
-        rsids = weights['rsid'].tolist()
-        if len(rsids) == len(set(rsids)):
-            warning(f'"weights" has duplicated RSIDs, only the first\
-                      appearane is kept')
-            
-            # FIXME: AQUI ESTOY. Esta mal. rsids es una columna no el index.
-            dopple_rsids = rsids[weights.duplicated()]
-            weights.drop(index=dopple_rsids)
+        if not self.is_consolidated:
+            self.consolidate(inplace=True)
 
-        assert 'ea' in weights.columns
-        assert 'weight' in weights.columns
-        assert 'rsid' in weights.columns
-        rsids = weights['rsid'].tolist()
-        # make sure that all rsids are unique
-        assert len(rsids) == len(set(rsids))
-        return weights
+        probs = self.get_array_of_probabilites()
 
+        # TODO: DONE Filter out bad SNPS
 
-    # if isinstance(weights, str):
-    #     assert os.path.isfile(weights)
-    #     weights = pd.read_csv(weights, sep='\t', comment='#')
-    # weights.columns = [x.lower() for x in weights.columns]
-    # weights.rename(columns={'snpid': 'rsid', 'chr_name': 'chr',
-    #                         'effect_allele': 'ea', 'effect_weight': 'weight'},
-    #                inplace=True)
+        n_rsid = len(self.rsids)
+        n_sample = len(self.probabilities[self.rsids[0]][0])
 
-    # assert 'ea' in weights.columns
-    # assert 'weight' in weights.columns
-    # assert 'rsid' in weights.columns
-    # rsids = weights['rsid'].tolist()
-    # # make sure that all rsids are unique
-    # assert len(rsids) == len(set(rsids))
-    # return weights
+        logger.info(f'Calculating genotypes for {n_rsid} SNPs and \
+                    {n_sample} samples ... ')
+
+# consol_prob_matrix = np.zeros((len(self.probabilities),  # RSIDs
+#                                n_samples,                # Samples
+#                                3))                       # probability
+
+        genotype_allele = np.empty((n_sample, n_rsid), dtype=str)
+        genotype_012 = np.zeros((n_sample, n_rsid), dtype=int)
+        probability = np.zeros((n_sample, n_rsid), dtype=np.float64)
+
+        # resahpe to allow for straight indexing
+        ref = np.tile(self.metadata['REF'].to_numpy(), (n_rsid, 1)).T
+        alt = np.tile(self.metadata['ALT'].to_numpy(), (n_rsid, 1)).T
+
+        i_max_p = np.argmax(probs, axis=2)
+        genotype_allele[i_max_p == 0] = ref[i_max_p == 0] + ref[i_max_p == 0]
+        genotype_allele[i_max_p == 1] = "".join(sorted(ref[i_max_p == 1] +
+                                                       alt[i_max_p == 1]))
+        genotype_allele[i_max_p == 2] = alt[i_max_p == 2] + alt[i_max_p == 2]
+        genotype_012 = i_max_p
+
+        if weights is not None:
+            ea = w['ea'].to_numpy()
+            # compute individual dosage
+            mask_ea_eq_ref = ea == ref
+            mask_ea_eq_alt = ea == alt
+
+            dosage = np.zeros((n_rsid, n_sample))
+            dosage[mask_ea_eq_ref] = (probs[mask_ea_eq_ref, 1]
+                                      + 2 * probs[mask_ea_eq_ref, 0])
+            dosage[mask_ea_eq_alt] = (probs[mask_ea_eq_alt, 1]
+                                      + 2 * probs[mask_ea_eq_alt, 2])
+
+            wSNP = w['weight'].to_numpy().astype(float)
+            riskscore = np.sum(dosage * wSNP, axis=1)
+            logger.info(f'Calculate riskscore using weights')
+            return genotype_allele, genotype_012, riskscore
+        else:
+            return genotype_allele, genotype_012
 
     @staticmethod
     def from_bgen_transform(files, rsids_as_index=True, no_neg_samples=False, \
@@ -1152,12 +1227,12 @@ class Genotype():
             verbose (bool, optional): addiotinal processing information. 
             Defaults to True.
         """                                             
-        metadata, probabilities = read_bgen_for_Genotype(files=files, 
-                                                       verify_integrity=verify_integrity,
-                                                       verbose=verbose)
+        metadata, probabilities =\
+            read_bgen_for_Genotype(files=files,
+                                   verify_integrity=verify_integrity,
+                                   verbose=verbose)
 
-
-        return Genotype(metadata, probabilities) 
+        return Genotype(metadata, probabilities)
 
     @staticmethod
     def _validate_arguments(meta, prob):
@@ -1165,6 +1240,7 @@ class Genotype():
         - metadata DataFrame has columns 'REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'
         - same order of RSID in metadata as probabilities, 
         - probabilities has same dimensions"""
+        # TODO: move to BGEN read before a variable is created
 
         if sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)) < 6:
             raise_error("Missign columns in metadata")
@@ -1199,6 +1275,9 @@ def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
         raise_error(f'gen is not a Genotype object')
 
     # TODO: Check weights and get good RSIDs
+    # if weights is not None:
+    #     w = read_weights(weights)
+    #     self.filter_by_weigths(weights, inplace=true)
 
     # TODO: DONE filter Genotype by user defined rsids (good ones) and samples
     gen = gen.filter(samples=samples, rsids=snps)

@@ -246,7 +246,6 @@ def test_read_weights_mock():
     assert  validatePANDAScolumns(w, ['ea', 'weight', 'rsid', 'chr'])
 
 
-
 def test_GP2dosage_operations():
     """Same solution for both compuations"""
     mock_GP  = pd.DataFrame(np.ones((3, 3)))
