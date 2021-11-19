@@ -763,6 +763,11 @@ class Genotype():
         -------
         list of strings
             unique samples in Genotype
+        
+        Rasises
+        -------
+        ValueError
+            If Genotype RSIDs and Samples are not consolidated
         """
         if not self.is_consolidated:
             raise_error('Samples are not consolidated across RSIDs. Samples\
@@ -798,7 +803,6 @@ class Genotype():
         a copy of it.
         """
         # TODO: DONE make possible that filter happnes inplace
-        # TODO: test what happens if required RSIDS or samples are not in data
         if rsids is None and samples is None:
             return self
         if inplace:
@@ -1045,16 +1049,15 @@ class Genotype():
                                        3))                       # probability
         for i, sample_prob in enumerate(self.probabilities.values()):
             consol_prob_matrix[i, :, :] = sample_prob[1]
-        # TODO: unit-test it
         return consol_prob_matrix
 
-    def validate_metadata(self):
+    def validate_metadata(self, inplace=True):
         """ Check that metadata information has the right format. Return the 
         same Genotype if the filds REF and ALT contain only one lement. 
         Otherwise, remove the RSIDS with worng metadata in the metadata and 
         probability fields and retrun a new instance of Genotype
         """
-        # TODO: inplace option, move validations to read BGEN
+        # TODO: move validations to read BGEN, inplace option is needed?.
         wrong_rsids = []
         for rsid, ref, alt in zip(self.metadata.index,
                                   self.metadata['REF'].values,
@@ -1065,13 +1068,24 @@ class Genotype():
                 wrong_rsids.append(rsid)
         
         if len(wrong_rsids) > 0:
-            metadata = self.metadata.drop(index=wrong_rsids)
-            prob = copy.deepcopy(self.probabilities)
-            for rsid in wrong_rsids:
-                prob.pop(rsid)
-            return Genotype(metadata=metadata, probabilities=prob)
+            if inplace:
+                self.metadata.drop(index=wrong_rsids, inplace=inplace)
+                for rsid in wrong_rsids:
+                    self.probabilities.pop(rsid)
+                return None
+            else:
+                metadata = self.metadata.drop(index=wrong_rsids,
+                                              inplace=inplace)
+                prob = copy.deepcopy(self.probabilities)
+                for rsid in wrong_rsids:
+                    prob.pop(rsid)
+                out = Genotype(metadata=metadata, probabilities=prob)
+                return out
         else:
-            return self
+            if inplace:
+                return None
+            else:
+                return self
         # TODO: pytest it
         # FIXME: Should it return a new object or modiffies the existing object
 
