@@ -14,7 +14,7 @@ from pathlib import Path
 from hipsnp.utils import warn, raise_error, logger
 import copy
 from functools import reduce
-
+from pathlib import Path
 
 def get_chromosome(c,
                    datalad_source=None,
@@ -32,19 +32,20 @@ def get_chromosome(c,
     returns: list of files, datalad dataset object, list of datalad get output
     """
     if datalad_source is None or datalad_source == '':
-        files = glob.glob(os.path.join(ds.path,
-                                       imputationdir,
-                                       '*_c' + str(c) + '_*'))
+        # TODO: what is ds?, add path argument?
+        files = list(Path(ds.path).joinpath(imputationdir).glob('*_c' +
+                                                                str(c) +
+                                                                '_*'))
         ds = None
         getout = ['datalad not used'] * len(files)
     else:
         if data_dir is None or data_dir == '':
-            data_dir = os.path.join('/tmp', 'genetic')
+            data_dir = Path('/tmp/genetic')
 
         ds = datalad.clone(source=datalad_source, path=data_dir)
-        files = glob.glob(os.path.join(ds.path,
-                                       imputationdir,
-                                       '*_c' + str(c) + '_*'))
+        files = list(Path(ds.path).joinpath(imputationdir).glob('*_c' +
+                                                                str(c) +
+                                                                '_*'))
         getout = ds.get(files)
 
     return files, ds, getout
@@ -74,7 +75,7 @@ def rsid2chromosome(rsids, chromosomes=None):
     chromosomes: list of chromosomes, string or list of strings
     returns: dataframe with columns 'rsids' and 'chromosomes'
     """
-    if isinstance(rsids, str) and os.path.isfile(rsids):
+    if isinstance(rsids, str) and Path(rsids).is_file():
         rsids = pd.read_csv(rsids, header=None, sep='\t', comment='#')
         if rsids.shape[1] > 1:
             # this check provides support for PSG files
@@ -146,14 +147,14 @@ def rsid2snp(rsids,
     if qctool is None:
         qctool = shutil.which('qctool')
 
-    if qctool is None or os.path.isfile(qctool) is False:
+    if qctool is None or Path(qctool).is_file() is False:
         print('qctool is not available')
         raise
 
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+    if not Path(outdir).exists():
+        Path(outdir).mkdir()
 
-    if force is True and os.listdir(outdir):
+    if force is True and list(Path(outdir).iterdir()):
         print('the output directory must be empty')
         raise
 
@@ -172,9 +173,9 @@ def rsid2snp(rsids,
         if chromosomes_use is not None and ch not in chromosomes_use:
             print('skipping chromosome ' + str(ch), ' not in the use list')
             continue
-        file_out = os.path.join(outdir,
-                                'chromosome_' + str(ch) + '.' + outformat)
-        if force is False and os.path.isfile(file_out):
+        file_out = Path(outdir, 'chromosome' + str(ch) + outformat)
+        
+        if force is False and file_out.is_file():
             print(f'chromosome {ch} output file exists, skipping: {file_out}')
             continue
 
@@ -215,8 +216,7 @@ def rsid2snp(rsids,
                 file_sample = fl
 
         assert file_bgen is not None and file_sample is not None
-        file_rsids = os.path.join(outdir,
-                                  'rsids_chromosome' + str(ch) + '.txt')
+        file_rsids = Path(outdir, 'rsids_chromosome' + str(ch) + '.txt')
         df = pd.DataFrame(rs_ch)
         df.to_csv(file_rsids, index=False, header=False)
 
@@ -230,6 +230,7 @@ def rsid2snp(rsids,
 
         if datalad_drop:
             # must use relative paths???
+            # TODO: fix path
             common_prefix = os.path.commonprefix([files[0], ds.path])
             files_rel = [os.path.relpath(path, common_prefix)
                          for path in files]
@@ -261,12 +262,11 @@ def rsid2snp_multiple(files, outdir,
     ch_rs   = [None] * len(files)
     for i in range(len(files)):
         print('file ' + str(i) + ': ' + str(files[i]))
-        if os.path.isfile(files[i]) is False:
+        if Path(files[i]).is_file() is False:
             print('file ' + str(files[i]) + ' does not exist')
             raise
-        bname = os.path.basename(files[i])
-        bname = os.path.splitext(bname)[0]
-        outdirs[i] = os.path.join(outdir, bname)
+        bname = Path(files[i]).name
+        outdirs[i] = Path(outdir, bname)
         ch_rs[i] = rsid2chromosome(files[i])
         print(ch_rs[i].head())
         uchromosomes = pd.unique(ch_rs[i]['chromosomes'])
@@ -314,7 +314,7 @@ def read_bgen(files,
 
     # make sure that files exist
     for f in files:
-        assert os.path.isfile(f)
+        assert Path(f).is_file()
 
     # read all the files
     if verbose:
