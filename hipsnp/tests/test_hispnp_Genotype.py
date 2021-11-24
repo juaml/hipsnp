@@ -416,3 +416,114 @@ def test__get_array_of_probabilites():
     gen.consolidate()
     probs = gen.get_array_of_probabilites()
     assert np.array_equal(mockprob, probs)
+
+
+def test_filter_by_weigths():
+    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
+    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv', 
+                     'weights_noMatchRSID.csv']
+    n_rsid = [5, 100, 199, 0]
+    weights = []
+    for wfile in weights_files:
+        path_to_file = path_to_weights + wfile
+        file = hps.read_weights_Genotype(path_to_file)
+        weights.append(file)
+
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen_ref = hps.Genotype.from_bgen(files=bgenfile)
+
+    for i, w in enumerate(weights):
+        gen = copy.deepcopy(gen_ref)
+        if n_rsid[i] == 0:
+            with pytest.raises(ValueError):
+                gen.filter_by_weigths(w)
+
+        else:
+            gen.filter_by_weigths(w)
+            assert len(gen.rsids) == n_rsid[i]
+
+
+def test_snp2genotype():
+    "Compare outputs of snp2genotyp in Genotype object ans as initial function"
+
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen = hps.Genotype.from_bgen(files=bgenfile)
+
+        snpdata, probsdata = hps.read_bgen(files=bgenfile,
+                                           rsids_as_index=True,
+                                           no_neg_samples=False,
+                                           join='inner',
+                                           verify_integrity=False,
+                                           probs_in_pd=False,
+                                           verbose=True)
+ 
+    g_allele_old, g_012_old, prob_old = hps.snp2genotype(snpdata=snpdata,
+                                                         th=0.9,
+                                                         snps=None,
+                                                         samples=None,
+                                                         genotype_format='allele',
+                                                         probs=probsdata,
+                                                         weights=None,
+                                                         verbose=True,
+                                                         profiler=None)
+
+    gen.consolidate()
+    g_allele, g_012 = gen.snp2genotype()
+
+    assert np.array_equal(g_012_old.to_numpy().T, g_012)
+    assert np.array_equal(g_allele_old.to_numpy().T, g_allele)
+
+
+def test_snp2genotype_weigths():
+    """Compare outputs of snp2genotyp in Genotype object ans as initial function
+    when weights are given"""
+
+    # path_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/weights_all.csv'
+    
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen = hps.Genotype.from_bgen(files=bgenfile)
+
+        snpdata, probsdata = hps.read_bgen(files=bgenfile,
+                                           rsids_as_index=True,
+                                           no_neg_samples=False,
+                                           join='inner',
+                                           verify_integrity=False,
+                                           probs_in_pd=False,
+                                           verbose=True)
+ 
+    gen.consolidate()
+    gen_ref = copy.deepcopy(gen)
+    # weights = hps.read_weights_Genotype(path_weights)
+    # weights_old = hps.read_weights(path_to_weights)
+    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
+    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv']
+
+    for wf in weights_files:
+        path_w = path_to_weights + wf
+        g_allele_old, g_012_old, risk_old = hps.snp2genotype(snpdata=snpdata,
+                                                             th=0.9,
+                                                             snps=None,
+                                                             samples=None,
+                                                             genotype_format='allele',
+                                                             probs=probsdata,
+                                                             weights=path_w,
+                                                             verbose=True,
+                                                             profiler=None)
+        gen = copy.deepcopy(gen_ref)
+        g_allele, g_012, risk = gen.snp2genotype(weights=path_w)
+
+        # assert np.array_equal(g_012_old.to_numpy().T, g_012)
+        # assert np.array_equal(g_allele_old.to_numpy().T, g_allele)
+        assert np.allclose(np.squeeze(risk_old.to_numpy()), risk, equal_nan=True)
