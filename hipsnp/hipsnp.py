@@ -57,6 +57,10 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
         ds = None
         files = list(data_dir.joinpath(imputation_dir).glob('*_c' + c + '_*'))
         getout = ['datalad not used'] * len(files)
+    
+    if not files:
+        raise_error('No files were found on disk for chromosome {c}')
+        
     return files, ds, getout
 
 

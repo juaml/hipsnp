@@ -8,6 +8,7 @@ import numpy as np
 from pandas._testing import assert_frame_equal
 import datalad.api as dl
 import tempfile
+from pathlib import Path
 
 from hipsnp.hipsnp import Genotype
 
@@ -20,7 +21,7 @@ def filesHaveName(dataLget):
 
 def test_get_chromosome_outputTypes_pass():
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
-    cs = ['1', 1]
+    cs = ['1']
     with tempfile.TemporaryDirectory() as tempdir:
 
         errors = []
@@ -89,7 +90,7 @@ def test_ensembl_human_rsid_has_alleles():
     rsidsPass = ['rs699', 'rs102']
     for rsid in  rsidsPass:
         outRST = hps.ensembl_human_rsid(rsid)
-        assert 'A/G' in outRST.text
+        assert 'A/G' in outRST['mappings'][0]['allele_string']
 
 
 def test_ensembl_human_rsid_has_alleles_captures_failsCapital():
@@ -103,7 +104,7 @@ def test_ensembl_human_rsid_has_alleles_captures_failsCapital():
 def test_ensembl_human_rsid_has_alleles_captures_give_integer():
     """Exception raised internally"""
     rsidsFail = [123, 699]
-    for rsid in  rsidsFail:    
+    for rsid in rsidsFail:
         with pytest.raises(TypeError):
             hps.ensembl_human_rsid(rsid)
 
@@ -258,6 +259,7 @@ def test_GP2dosage_operations():
     assert all(dosis[0] == dosis[1])
     # assertin based on teh equations in the code, if the code is wrong the test as well.
 
+
 def test_GP2dosage_missmatch_EA_RE_ALT():
     mock_GP  = pd.DataFrame(np.ones((3, 3)))
     mock_REF = ['b']
@@ -265,6 +267,7 @@ def test_GP2dosage_missmatch_EA_RE_ALT():
     mock_EA  = 'a'
     with pytest.raises(NameError):
         hps.GP2dosage(mock_GP, mock_REF, mock_ALT, mock_EA) # snp is not defined in print statement
+
 
 def test_snp2genotype_from_SNPfiles():
     """compute SNP from mock data, then get genotype"""

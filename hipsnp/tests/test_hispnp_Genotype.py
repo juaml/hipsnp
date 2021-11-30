@@ -9,7 +9,7 @@ from pandas._testing import assert_frame_equal
 import numpy as np
 import shutil
 import copy
-
+from pathlib import Path
 
 def test_read_bgen_for_Genotype_has_metadata():
     """Bgen returned as Genotype object with expected fields and dymensions"""
@@ -415,7 +415,7 @@ def test__get_array_of_probabilites():
                                            np.squeeze(mockprob[i, :, :]))
     
     gen.consolidate()
-    probs = gen.get_array_of_probabilites()
+    probs = gen.get_array_of_probabilities()
     assert np.array_equal(mockprob, probs)
 
 
@@ -446,6 +446,7 @@ def test_filter_by_weigths():
         else:
             gen.filter_by_weigths(w)
             assert len(gen.rsids) == n_rsid[i]
+            assert  validatePANDAScolumns(w, ['ea', 'weight', 'rsid', 'chr'])
 
 
 def test_snp2genotype():
@@ -567,8 +568,7 @@ def test_rsid2snp():
                                                data_dir=tempdir,
                                                force=False,
                                                chromosomes=chromosomes,
-                                               chromosomes_use=None,
-                                               outformat='bgen')
+                                               chromosomes_use=None)
 
     assert ch_rs_old.equals(ch_rs)
 
@@ -606,10 +606,42 @@ def test_rsid2snp_noDrop():
                                                data_dir=tempdir,
                                                force=False,
                                                chromosomes=chromosomes,
-                                               chromosomes_use=None,
-                                               outformat='bgen')
+                                               chromosomes_use=None)
 
     assert ch_rs_old.equals(ch_rs)
+
+
+def validatePANDAScolumns(outPANDAS, refColFields):
+    outFields = [field for field in outPANDAS.columns]
+    return refColFields.sort() == outFields.sort()
+
+
+def test_rsid2snp_as_before_Genotype():
+    """ finds and uses qctool"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:
+
+        ch_rs, files, dataL = hps.rsid2snp_new(rsids,
+                                               outdir=tempdir,
+                                               datalad_source=source,
+                                               qctool=qctool,
+                                               datalad_drop=True,
+                                               datalad_drop_if_got=True,
+                                               data_dir=tempdir,
+                                               force=False,
+                                               chromosomes=chromosomes,
+                                               chromosomes_use=None)
+        filesRef = [tempdir + '/imputation/' + 'example_c' + str(chromosomes[0]) + '_v0.bgen',
+                    tempdir + '/imputation/' + 'example_c' + str(chromosomes[0]) + '_v0.sample']
+
+        assert isinstance(ch_rs, pd.core.frame.DataFrame)
+        assert validatePANDAScolumns(ch_rs, ['rsids', 'chromosomes'])
+        assert sorted([Path(f) for f in filesRef]) == sorted(files)
+        assert type(dataL) == dl.Dataset
 
 
 def test_get_chromosome():
@@ -626,3 +658,74 @@ def test_get_chromosome():
                                                          data_dir=tempdir)
         assert files == files_o
         assert ds == ds_o
+
+
+def _filesHaveName(dataLget):
+    """files obtined with DataLad are the exnple files"""
+    filenames = [Path(ind['path']).name
+                 for ind in dataLget if ind['type'] == 'file']
+    sameFiles = 'example_c1_v0.bgen' and 'example_c1_v0.sample' in filenames
+    return sameFiles
+
+
+def test_get_chromosome_outputTypes_pass():
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
+    c = '1'
+    with tempfile.TemporaryDirectory() as tempdir:
+        filesRef = [
+            tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.bgen',
+            tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.sample']
+        files, ds, getout = hps.get_chromosome(c=c, datalad_source=source,
+                                               data_dir=tempdir)
+        assert sorted([Path(f) for f in filesRef]) == sorted(files)
+        assert type(ds) == dl.Dataset
+        assert _filesHaveName(getout)
+
+        # no datalad source, files are stored locally
+        files_NO_dl, ds_NO_dl, getout_NO_dl = hps.get_chromosome(
+            c=c, datalad_source=None, data_dir=tempdir)
+        assert sorted([Path(f) for f in filesRef]) == sorted(files_NO_dl)
+        assert ds_NO_dl is None
+        assert all([f == 'datalad not used' for f in getout_NO_dl])
+
+        # chromosome given as int intead of str
+        c = 1
+        with pytest.raises(TypeError):
+            hps.get_chromosome(c=c, datalad_source=source, data_dir=tempdir)
+
+        # chormosome 'c' does not match chromosome on datalad sourc
+        c = '23'
+        with pytest.raises(ValueError):
+            hps.get_chromosome(c=c, datalad_source=source, data_dir=tempdir)
+
+    # woring path to chormosome files
+    with tempfile.TemporaryDirectory() as tempdir:
+        c = '1'
+        with pytest.raises(ValueError):
+            hps.get_chromosome(c=c, datalad_source=None, data_dir=tempdir)
+
+
+def test_ensembl_human_rsid_has_alleles():
+    """test output is in JSON format"""
+    rsidsPass = ['rs699', 'rs102']
+    for rsid in rsidsPass:
+        outRST = hps.ensembl_human_rsid(rsid)
+        assert 'A/G' in outRST['mappings'][0]['allele_string']
+
+
+def test_ensembl_human_rsid_has_alleles_captures_failsCapital():
+    """Exception raised internally"""
+    rsidsFail = ['RS699', 'ID699', '699']
+    for rsid in rsidsFail:
+        with pytest.raises(ValueError):
+            hps.ensembl_human_rsid(rsid)
+
+
+def test_ensembl_human_rsid_has_alleles_captures_give_integer():
+    """rsids with wrong format"""
+    rsidsFail = [123, 699, 'RS102']
+    for rsid in rsidsFail:
+        with pytest.raises(ValueError):
+            hps.ensembl_human_rsid(rsid)
+
+
