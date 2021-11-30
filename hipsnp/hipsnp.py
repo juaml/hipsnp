@@ -16,21 +16,26 @@ import copy
 from functools import reduce
 
 
-def get_chromosome(c, datalad_source=None, imputationdir='imputation', 
-                   data_dir=None):
+def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
+                   imputation_dir='imputation', data_dir='/tmp/genetic'):
     """Get a particular chromosome's (imputed) data
 
     Parameters
     ----------
     c : str
         Chormosome number
-    datalad_source : str, optional
-        datalad data source, by default 'ria+http://ukb.ds.inm7.de#~genetic'
+    datalad_source : str or None, optional
+        datalad data source. if None, the directory of chromosome data should
+        be given with data_dir and imputation_dir arguments 
+        (i.e. <data_dir>/<imputationdir>'), by default
+        'ria+http://ukb.ds.inm7.de#~genetic'
     imputationdir : str, optional
-         directory in which the imputation files are stored, 
+         directory in which the imputation files are stored,
          by default 'imputation'
     data_dir : str, optional
-        directory to use for the datalad dataset, by default None
+        directory to use for the datalad dataset, or data files,
+        by default '/tmp/genetic'. chromosome data will or should be placed on 
+        '<data_dir>/<imputationdir>'
 
     Returns
     -------
@@ -41,11 +46,27 @@ def get_chromosome(c, datalad_source=None, imputationdir='imputation',
 
 
     """ 
+
+    data_dir = Path(data_dir)
+
+    if datalad_source:
+        ds = datalad.clone(source=datalad_source, path=data_dir)
+        files = list(data_dir.joinpath(imputation_dir).glob('*_c' + c + '_*'))
+        getout = ds.get(files)
+    else:
+        ds = None
+        files = list(data_dir.joinpath(imputation_dir).glob('*_c' + c + '_*'))
+        getout = ['datalad not used'] * len(files)
+    return files, ds, getout
+
+
+def get_chromosome_old(c, datalad_source=None, imputationdir='imputation', 
+                       data_dir=None):
     if datalad_source is None or datalad_source == '':
-        # ASK: what is ds?, add path argument?
-        files = list(Path(ds.path).joinpath(imputationdir).glob('*_c' +
-                                                                str(c) +
-                                                                '_*'))
+        # TODO: DONE allow for reading the data from a local directory
+        files = list(Path(data_dir).joinpath(imputationdir).glob('*_c' +
+                                                                 str(c) +
+                                                                 '_*'))
         ds = None
         getout = ['datalad not used'] * len(files)
     else:
@@ -86,9 +107,7 @@ def ensembl_human_rsid(rsid):
     returns: json object
     """
     if not isinstance(rsid, str) or rsid[0:2] != 'rs':
-        print(rsid + '\n')
-        print('rsid must be a string with a starting "rs"')
-        raise ValueError
+        raise_error(f'rsid must be a string with "rs"')
 
     url = 'http://rest.ensembl.org/variation/human/' + rsid +\
           '?content-type=application/json'
@@ -111,12 +130,10 @@ def rsid2chromosome(rsids, chromosomes=None):
     pandas DataFrame
         dataframe with columns 'rsids' and 'chromosomes'
     """
-    # ASK: chek with if or do a try-except?
     if isinstance(rsids, str) and Path(rsids).is_file():
         rsids = pd.read_csv(rsids, header=None, sep='\t', comment='#')
         if rsids.shape[1] > 1:
-            # this check provides support for PSG files
-            # ASK: what are PSG files? is this needed? 
+            # this check provides support for PGS files
             if isinstance(rsids.iloc[0, 1], str):
                 rsids.drop(index=0, inplace=True)
             chromosomes = list(rsids.iloc[:, 1])
@@ -150,7 +167,7 @@ def rsid2snp_new(rsids, outdir,
                  datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
                  qctool=None, datalad_drop=True, datalad_drop_if_got=True,
                  data_dir=None, force=False, chromosomes=None,
-                 chromosomes_use=None, outformat='bgen'):
+                 chromosomes_use=None):
     """convert rsids to snps
 
     Parameters
@@ -178,21 +195,17 @@ def rsid2snp_new(rsids, outdir,
         chromosomes
     chromosomes_use : [type], optional
         [description], by default None
-    outformat : str, optional
-        [description], by default 'bgen'
 
     Returns
     -------
     pandas DataFrame
         pandas dataframe with rsid-chromosome pairs
     """ 
-    # TODO: outformat might not be needed
-    assert isinstance(outformat, str) and outformat in ['vcf', 'bgen']
     # check if qctool is available
     if qctool is None or Path(qctool).is_file() is False:
         qctool = shutil.which('qctool')
         if qctool is None:
-            raise_error(f'qctool is not available')
+            raise_error(f'qctool cannot be found')
 
     if not Path(outdir).exists():
         Path(outdir).mkdir()
@@ -205,8 +218,7 @@ def rsid2snp_new(rsids, outdir,
         raise_error('Mismatch between the number of chrmosomes and rsids')
 
     ch_rs = rsid2chromosome(rsids, chromosomes=chromosomes)
-    chromosomes = ch_rs['chromosomes'].tolist()
-    uchromosomes = pd.unique(chromosomes)
+    uchromosomes = ch_rs['chromosomes'].unique()
     files = None
     ds = None
     logger.info(f'Chromosomes needed: {uchromosomes}')
@@ -214,7 +226,7 @@ def rsid2snp_new(rsids, outdir,
         if chromosomes_use and ch not in chromosomes_use:
             warn(f'Chromosome {ch} not in the use list, skipping it')
             continue
-        file_out = Path(outdir, 'chromosome' + str(ch) + outformat)
+        file_out = Path(outdir, 'chromosome' + str(ch) + 'bgen')
 
         if force is False and file_out.is_file():
             warn(f'chromosome {ch} output file exists, skipping: {file_out}')
@@ -228,52 +240,46 @@ def rsid2snp_new(rsids, outdir,
             continue
 
         if len(rs_ch) < 11:
-            print('rsids: ' + str(rs_ch) + '\n')
+            logger.info(f'rsids: {rs_ch}\n')
 
         # get the data
-        print('datalad: getting files')
         files, ds, getout = get_chromosome(ch,
                                            datalad_source=datalad_source,
                                            data_dir=data_dir)
         for f_ix, getout_val in enumerate(getout):
             status = getout_val['status']
             if status != 'ok' and status != 'notneeded':
+                ds.remove(dataset=data_dir)
                 raise_error(f'datalad: error getting file {f_ix}: \
-                              {getout_val["path"]} \n')
-                # TODO: cleanup datalad files
+                              {getout_val["path"]} \n')                    
+                # TODO: DONE cleanup datalad files
             else:
                 logger.info(f'datalad: status {status} file {files[f_ix]}')
 
         # find the bgen and sample files
-        file_bgen = None
-        file_sample = None
+        file_bgen = []
+        file_sample = []
         for fl in files:
             name, ext = os.path.splitext(fl)
             if ext == '.bgen':
-                assert file_bgen is None 
-                file_bgen = fl
+                file_bgen.append(fl)
             elif ext == '.sample':
-                assert file_sample is None
-                file_sample = fl
-
-        assert file_bgen is not None and file_sample is not None
-        
-        file_rsids = Path(outdir, 'rsids_chromosome' + str(ch) + '.txt')
-        df = pd.DataFrame(rs_ch) 
-
+                file_sample.append(fl)
+        if len(file_bgen) != 1 or len(file_sample) != 1:
+            raise_error(f'Wrong bgen and/or sample files for chromosome {ch}')
+    
+        file_rsids = Path(outdir, 'rsids_chromosome' + ch + '.txt')
+        df = pd.DataFrame(rs_ch)
         df.to_csv(file_rsids, index=False, header=False)
 
-        cmd = (qctool + ' -g ' + file_bgen + ' -s ' + file_sample
-               + ' -incl-rsids ' + file_rsids  + ' -og ' + file_out)
-        if outformat == 'bgen':
-            cmd += ' -ofiletype bgen_v1.2 -bgen-bits 8'
+        cmd = (qctool + ' -g ' + str(file_bgen) + ' -s ' + str(file_sample)
+               + ' -incl-rsids ' + str(file_rsids)  + ' -og ' + str(file_out)
+               + ' -ofiletype bgen_v1.2 -bgen-bits 8')
 
         logger.info('running qctool: {cmd}\n')
         os.system(cmd)
 
         if datalad_drop:
-            # ASK: must use relative paths???, this question was in the origianl code
-            # TODO: fix path
             common_prefix = os.path.commonprefix([files[0], ds.path])
             files_rel = [os.path.relpath(path, common_prefix)
                          for path in files]
@@ -364,7 +370,7 @@ def rsid2snp(rsids, outdir,
         if len(rs_ch) == 0:
             continue
 
-        if len(rs_ch) < 11: # ASK: is this needed? remove?
+        if len(rs_ch) < 11:
             print('rsids: ' + str(rs_ch) + '\n')
 
         # get the data
@@ -375,10 +381,9 @@ def rsid2snp(rsids, outdir,
         for fi in range(len(getout)):
             status = getout[fi]['status']
             print('datalad: status ' + str(status) + ' file ' + str(files[fi]))
-            if status != 'ok' and status != 'notneeded': # ASK: 'and' or 'or'
+            if status != 'ok' and status != 'notneeded':
                 print('datalad: error getting file '
                       + str(fi) + ': ' + str(getout[fi]['path']) + '\n')
-                # todo: cleanup datalad files
                 raise
 
         # find the bgen and sample files
@@ -388,8 +393,6 @@ def rsid2snp(rsids, outdir,
             name, ext = os.path.splitext(fl)
             if ext == '.bgen':
                 assert file_bgen is None
-                # ASK: assertion error if more than on file,is needed?
-                # anyhow, file_bgen should contin only one
                 file_bgen = fl
             elif ext == '.sample':
                 assert file_sample is None
@@ -399,11 +402,8 @@ def rsid2snp(rsids, outdir,
         file_rsids = Path(outdir, 'rsids_chromosome' + str(ch) + '.txt')
         df = pd.DataFrame(rs_ch)
         df.to_csv(file_rsids, index=False, header=False)
-        # ASK: this file will remain in the disk, should
-        # we use  "with tempfile.TemporaryDirectory() as tmpdir:
-        # to run the qctool comand?
-        cmd = (qctool + ' -g ' + file_bgen + ' -s ' + file_sample
-               + ' -incl-rsids ' + file_rsids  + ' -og ' + file_out)
+        cmd = (qctool + ' -g ' + str(file_bgen) + ' -s ' + str(file_sample)
+               + ' -incl-rsids ' + str(file_rsids)  + ' -og ' + str(file_out))
         if outformat == 'bgen':
             cmd += ' -ofiletype bgen_v1.2 -bgen-bits 8'
 
@@ -411,8 +411,6 @@ def rsid2snp(rsids, outdir,
         os.system(cmd)
 
         if datalad_drop:
-            # must use relative paths???
-            # ASK: fix path
             common_prefix = os.path.commonprefix([files[0], ds.path])
             files_rel = [os.path.relpath(path, common_prefix)
                          for path in files]
@@ -438,6 +436,7 @@ def rsid2snp_multiple(files, outdir,
                       outformat='bgen'):
     """
     """
+    # TODO: AT END not needed, remove at the end
     chromosomes = []
     # check if all files are available
     outdirs = [None] * len(files)
@@ -480,7 +479,6 @@ def rsid2snp_multiple(files, outdir,
                                          datalad_drop=datalad_drop_i,
                                          datalad_drop_if_got=False,
                                          outformat=outformat)
-    # ASK: is there anything missing here? returns a function argument 
     return outdirs
 
 
@@ -553,6 +551,127 @@ def read_bgen(files,
     return snpdata, probsdata
 
 
+def _validations_at_bgen(files):
+    """check that information in bgen file has the fromat needed
+
+    Parameters
+    ----------
+    files :  str or list(str)
+        Files to be read
+    """
+    if len(files) != len(set(files)):
+        raise_error("There are duplicated bgen files")
+
+    if not all([Path(f).is_file() for f in files]):
+        raise_error('bgen file does not exist', FileNotFoundError())
+
+    for f in files:
+        with open_bgen(f, verbose=False) as bgen:
+            # we can only deal with biallelic variants
+            if np.any(bgen.nalleles != 2):
+                raise_error('Only biallelic variants are allowed')
+            
+
+def _read_bgen_for_Genotype_validate(files):
+
+    """Validate information in bgen file, read bgen files, and extract
+     metadata and probabilites.
+
+    Parameters
+    ----------
+    files : str or list(str)
+            Files to be read
+
+    Returns
+    -------
+        snpdata : pandas DataFrame
+        row indexes: RSIDs; columns: CHROM, POS, ID, and FORMAT
+        probabilites : dict
+        keys: RDIDs, values: tuple(Smaples,
+                                   probilities : numpy array [Samples, 3])
+    """
+    if isinstance(files, str):
+        files = [files]
+
+    if len(files) != len(set(files)):
+        raise_error("There are duplicated bgen files")
+
+    if not all([Path(f).is_file() for f in files]):
+        raise_error('bgen file does not exist', FileNotFoundError())
+
+    # read all the files
+    logger.info(f'Reading {len(files)} bgen files...')
+
+    snpdata = pd.DataFrame()
+    probabilites = dict()
+    for f in alive_progress.alive_it(files):
+        logger.info(f'Reading {f}')
+        with open_bgen(f, verbose=False) as bgen:
+            # we can only deal with biallelic variants
+            if np.any(bgen.nalleles != 2):
+                raise_error('Only biallelic variants are allowed')
+
+            # find duplicate RSIDs within a file
+            _, iX_unique_in_file = np.unique(bgen.rsids, return_index=True)
+            if iX_unique_in_file.shape[0] != bgen.rsids.shape[0]:
+                warn(f'Duplicated RSIDs in file {f}')
+
+            # check allele are  ['A','C','T','g'])
+
+            # find duplicates with previous files
+            if not snpdata.empty and np.sum(snpdata.index == bgen.rsids) != 0:
+                warn(f'Files have duplicated RSIDs')
+                # indexes with rsids not previously taken to keep unique RSIDS
+                mask_unique_btwb_files = np.isin(bgen.rsids, snpdata.index,
+                                                 invert=True)
+                mask_to_keep = np.zeros(len(bgen.rsids), dtype=np.bool_)
+                mask_to_keep[iX_unique_in_file[mask_unique_btwb_files]] = True
+            else:
+                mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
+      
+            if any(mask_to_keep):
+                # get REF and ALT
+                # TODO: DONE ref and alt should be A, C, T, or G
+                alleles = np.array(
+                    [val for val in
+                     np.char.split(bgen.allele_ids[mask_to_keep], sep=',')])
+                     
+                if not np.isin(alleles, ['A', 'C', 'T', 'G']).all():
+                    raise_error(f'alleles not "A", "C", "T", or "G"\
+                                  in file {f}')
+
+                # alleles = bgen.allele_ids[mask_to_keep]
+                # alleles = np.array([a.split(',') for a in alleles])
+
+                # dataframe with metadata of unique RSIDS.
+                tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
+                tmp = tmp.assign(REF=alleles[:, 0],
+                                 ALT=alleles[:, 1],
+                                 CHROM=bgen.chromosomes[mask_to_keep],
+                                 POS=bgen.positions[mask_to_keep],
+                                 ID=bgen.ids[mask_to_keep],
+                                 FORMAT='GP')
+
+                if f == files[0]:
+                    myjoin = 'outer'
+                else:
+                    myjoin = 'inner'
+                # concatenate metadata of files
+                snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0)
+
+                # crear probabilites data dictionary
+                probs = bgen.read()
+                tmp_probabilites = {k_rsid:
+                                    (np.array(bgen.samples),
+                                     np.squeeze(probs[:, i, :]))
+                                    for i, k_rsid in enumerate(tmp.index) }
+                probabilites.update(tmp_probabilites)
+
+                tmp = None
+
+    return snpdata, probabilites
+
+
 def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
 
     """Read bgen files and extract metadata and probabilites
@@ -611,6 +730,7 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
       
             if any(mask_to_keep):
                 # get REF and ALT
+                # TODO: DONE ref and alt should be A, C, T, or G
                 alleles = bgen.allele_ids[mask_to_keep]
                 alleles = np.array([a.split(',') for a in alleles])
                 # dataframe with metadata of unique RSIDS.
@@ -695,7 +815,7 @@ def read_weights_Genotype(weights):
     except ValueError as e:
         raise_error(f'Fails reading weights', klass=e)
 
-    if not('ea' and 'weight' in weights.columns):
+    if 'ea' not in weights.columns or 'weight' not in weights.columns:
         raise_error(f'Weights contains wrong column names')
     
     if np.sum(weights.index.duplicated()) != 0:
@@ -1246,7 +1366,8 @@ class Genotype():
         Otherwise, remove the RSIDS with worng metadata in the metadata and 
         probability fields and retrun a new instance of Genotype
         """
-        # TODO: move validations to read BGEN, inplace option is needed?.
+        # TODO: REMOVE not needed. It is done at read_begen, rais erro if not 
+        # a string wth 'A','C','T', or 'G'
         wrong_rsids = []
         for rsid, ref, alt in zip(self.metadata.index,
                                   self.metadata['REF'].values,
@@ -1275,8 +1396,7 @@ class Genotype():
                 return None
             else:
                 return self
-        # TODO: pytest it
-        # FIXME: Should it return a new object or modiffies the existing object
+        # TODO: DONE YEs, validate metadata, at bgen_read
 
     def filter_by_weigths(self, weights, inplace=True):
         # match filter RSIDs with RSIDs in Genotype
@@ -1340,7 +1460,8 @@ class Genotype():
         # TODO: DONE Filter out bad SNPS
 
         n_rsid = len(self.rsids)
-        n_sample = len(self.probabilities[self.rsids[0]][0])
+        samples = self.probabilities[self.rsids[0]][0]
+        n_sample = len(samples)
 
         logger.info(f'Calculating genotypes for {n_rsid} SNPs and \
                     {n_sample} samples ... ')
@@ -1366,6 +1487,12 @@ class Genotype():
         genotype_allele[i_max_p == 2] = alt[i_max_p == 2] + alt[i_max_p == 2]
         genotype_012 = i_max_p
 
+        genotype_allele = pd.DataFrame(data=genotype_allele,
+                                       index=self.rsids,
+                                       columns=samples)
+        genotype_012 = pd.DataFrame(data=genotype_012,
+                                    index=self.rsids,
+                                    columns=samples)
         if weights is not None:
             ea = w['ea'].to_numpy()
             ea = np.tile(ea, (n_sample, 1)).T
@@ -1383,10 +1510,13 @@ class Genotype():
             wSNP = w['weight'].to_numpy().astype(float).reshape(n_rsid, 1)
             riskscore = np.sum(dosage * wSNP, axis=0)
             logger.info(f'Calculate riskscore using weights')
+            riskscore = pd.DataFrame(data=riskscore,
+                                     index=samples)
             return genotype_allele, genotype_012, riskscore
         else:
             return genotype_allele, genotype_012
-            # ASK: return pandas DataFrames?
+            # TODO: DONE return pandas DataFrames? -> YES
+            # TODO: DONE adapt unit test to pandas output
 
     @staticmethod
     def from_bgen_transform(files, rsids_as_index=True, no_neg_samples=False, \

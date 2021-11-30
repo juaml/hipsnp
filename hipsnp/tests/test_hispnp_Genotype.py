@@ -1,3 +1,4 @@
+from typing import get_origin
 from attr.validators import in_
 import pytest
 import hipsnp as hps
@@ -478,9 +479,11 @@ def test_snp2genotype():
     gen.consolidate()
     g_allele, g_012 = gen.snp2genotype()
 
-    assert np.array_equal(g_012_old.to_numpy().T, g_012)
-    assert np.array_equal(g_allele_old.to_numpy().T, g_allele)
-
+    # assert np.array_equal(g_012_old.to_numpy().T, g_012)
+    # assert np.array_equal(g_allele_old.to_numpy().T, g_allele)
+    assert_frame_equal(g_012_old.transpose(), g_012, check_dtype=False)
+    assert_frame_equal(g_allele_old.transpose(), g_allele)
+    # SOME esceptions about the format need to be added
 
 def test_snp2genotype_weigths():
     """Compare outputs of snp2genotyp in Genotype object ans as initial function
@@ -526,4 +529,100 @@ def test_snp2genotype_weigths():
 
         # assert np.array_equal(g_012_old.to_numpy().T, g_012)
         # assert np.array_equal(g_allele_old.to_numpy().T, g_allele)
-        assert np.allclose(np.squeeze(risk_old.to_numpy()), risk, equal_nan=True)
+        
+        # assert np.allclose(np.squeeze(risk_old.to_numpy()), risk,
+        #                    equal_nan=True)
+        assert_frame_equal(risk_old, risk)
+
+
+def test_rsid2snp():
+    """ original and new function give the same outputs"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:
+
+        ch_rs_old, files_old, dataL_old = hps.rsid2snp(rsids,
+                                                       outdir=tempdir,
+                                                       datalad_source=source,
+                                                       qctool=qctool,
+                                                       datalad_drop=True,
+                                                       datalad_drop_if_got=True,
+                                                       data_dir=tempdir,
+                                                       force=False,
+                                                       chromosomes=chromosomes,
+                                                       chromosomes_use=None,
+                                                       outformat='bgen')
+    
+    with tempfile.TemporaryDirectory() as tempdir:
+
+        ch_rs, files, dataL = hps.rsid2snp_new(rsids,
+                                               outdir=tempdir,
+                                               datalad_source=source,
+                                               qctool=qctool,
+                                               datalad_drop=True,
+                                               datalad_drop_if_got=True,
+                                               data_dir=tempdir,
+                                               force=False,
+                                               chromosomes=chromosomes,
+                                               chromosomes_use=None,
+                                               outformat='bgen')
+
+    assert ch_rs_old.equals(ch_rs)
+
+
+def test_rsid2snp_noDrop():
+    """ original and new function give the same outputs when datalad datasets
+    are not dropped"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    rsids = ['RSID_101']
+    chromosomes = ['1']
+    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
+
+    with tempfile.TemporaryDirectory() as tempdir:
+
+        ch_rs_old, files_old, dataL_old = hps.rsid2snp(rsids,
+                                                       outdir=tempdir,
+                                                       datalad_source=source,
+                                                       qctool=qctool,
+                                                       datalad_drop=False,
+                                                       datalad_drop_if_got=True,
+                                                       data_dir=tempdir,
+                                                       force=False,
+                                                       chromosomes=chromosomes,
+                                                       chromosomes_use=None,
+                                                       outformat='bgen')
+    
+    with tempfile.TemporaryDirectory() as tempdir:
+
+        ch_rs, files, dataL = hps.rsid2snp_new(rsids,
+                                               outdir=tempdir,
+                                               datalad_source=source,
+                                               qctool=qctool,
+                                               datalad_drop=False,
+                                               datalad_drop_if_got=True,
+                                               data_dir=tempdir,
+                                               force=False,
+                                               chromosomes=chromosomes,
+                                               chromosomes_use=None,
+                                               outformat='bgen')
+
+    assert ch_rs_old.equals(ch_rs)
+
+
+def test_get_chromosome():
+    """compare old and new function's outputs
+    """
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
+    cs = '1'
+    with tempfile.TemporaryDirectory() as tempdir:
+        files, ds, getout = hps.get_chromosome(c=cs,
+                                               datalad_source=source,
+                                               data_dir=tempdir)
+        files_o, ds_o, getout_o = hps.get_chromosome_old(c=cs,
+                                                         datalad_source=source,
+                                                         data_dir=tempdir)
+        assert files == files_o
+        assert ds == ds_o
