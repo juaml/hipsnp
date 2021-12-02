@@ -148,7 +148,7 @@ def rsid2chromosome(rsids, chromosomes=None):
         rsids = [rsids]
 
     if chromosomes is None:
-        # TODO: test with chromosome None
+        # TODO: DONE test with chromosome None
         # get from ensembl
         chromosomes = [None] * len(rsids)
         for rs in range(len(rsids)):
@@ -506,104 +506,7 @@ def read_bgen(files,
     return snpdata, probsdata
 
 
-def _read_bgen_for_Genotype_validate(files):
-    # TODO: this function is not been called
-    """Validate information in bgen file, read bgen files, and extract
-     metadata and probabilites.
-
-    Parameters
-    ----------
-    files : str or list(str)
-            Files to be read
-
-    Returns
-    -------
-        snpdata : pandas DataFrame
-        row indexes: RSIDs; columns: CHROM, POS, ID, and FORMAT
-        probabilites : dict
-        keys: RDIDs, values: tuple(Smaples,
-                                   probilities : numpy array [Samples, 3])
-    """
-    if isinstance(files, str):
-        files = [files]
-
-    if len(files) != len(set(files)):
-        raise_error("There are duplicated bgen files")
-
-    if not all([Path(f).is_file() for f in files]):
-        raise_error('bgen file does not exist', FileNotFoundError())
-
-    # read all the files
-    logger.info(f'Reading {len(files)} bgen files...')
-
-    snpdata = pd.DataFrame()
-    probabilites = dict()
-    for f in alive_progress.alive_it(files):
-        logger.info(f'Reading {f}')
-        with open_bgen(f, verbose=False) as bgen:
-            # we can only deal with biallelic variants
-            if np.any(bgen.nalleles != 2):
-                raise_error('Only biallelic variants are allowed')
-
-            # find duplicate RSIDs within a file
-            _, iX_unique_in_file = np.unique(bgen.rsids, return_index=True)
-            if iX_unique_in_file.shape[0] != bgen.rsids.shape[0]:
-                warn(f'Duplicated RSIDs in file {f}')
-
-            # check allele are  ['A','C','T','g'])
-
-            # find duplicates with previous files
-            if not snpdata.empty and np.sum(snpdata.index == bgen.rsids) != 0:
-                warn(f'Files have duplicated RSIDs')
-                # indexes with rsids not previously taken to keep unique RSIDS
-                mask_unique_btwb_files = np.isin(bgen.rsids, snpdata.index,
-                                                 invert=True)
-                mask_to_keep = np.zeros(len(bgen.rsids), dtype=np.bool_)
-                mask_to_keep[iX_unique_in_file[mask_unique_btwb_files]] = True
-            else:
-                mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
-      
-            if any(mask_to_keep):
-                # get REF and ALT
-                # TODO: DONE ref and alt should be A, C, T, or G
-                alleles = np.array(
-                    [val for val in
-                     np.char.split(bgen.allele_ids[mask_to_keep], sep=',')])
-                     
-                if not np.isin(alleles, ['A', 'C', 'T', 'G']).all():
-                    raise_error(f'alleles not "A", "C", "T", or "G"\
-                                  in file {f}')
-
-                # dataframe with metadata of unique RSIDS.
-                tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
-                tmp = tmp.assign(REF=alleles[:, 0],
-                                 ALT=alleles[:, 1],
-                                 CHROM=bgen.chromosomes[mask_to_keep],
-                                 POS=bgen.positions[mask_to_keep],
-                                 ID=bgen.ids[mask_to_keep],
-                                 FORMAT='GP')
-
-                if f == files[0]:
-                    myjoin = 'outer'
-                else:
-                    myjoin = 'inner'
-                # concatenate metadata of files
-                snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0)
-
-                # crear probabilites data dictionary
-                probs = bgen.read()
-                tmp_probabilites = {k_rsid:
-                                    (np.array(bgen.samples),
-                                     np.squeeze(probs[:, i, :]))
-                                    for i, k_rsid in enumerate(tmp.index) }
-                probabilites.update(tmp_probabilites)
-
-                tmp = None
-
-    return snpdata, probabilites
-
-
-def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
+def read_bgen_for_Genotype(files, verify_integrity=False):
 
     """Read bgen files and extract metadata and probabilites
 
@@ -662,8 +565,16 @@ def read_bgen_for_Genotype(files, verify_integrity=False, verbose=True):
             if any(mask_to_keep):
                 # get REF and ALT
                 # TODO: DONE ref and alt should be A, C, T, or G
-                alleles = bgen.allele_ids[mask_to_keep]
-                alleles = np.array([a.split(',') for a in alleles])
+                # alleles = bgen.allele_ids[mask_to_keep]
+                # alleles = np.array([a.split(',') for a in alleles])
+                alleles = np.array(
+                    [val for val in
+                     np.char.split(bgen.allele_ids[mask_to_keep], sep=',')])
+                     
+                if not np.isin(alleles, ['A', 'C', 'T', 'G']).all():
+                    raise_error(f'alleles not "A", "C", "T", or "G"\
+                                  in file {f}')
+
                 # dataframe with metadata of unique RSIDS.
                 tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
                 tmp = tmp.assign(REF=alleles[:, 0],
