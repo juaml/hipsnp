@@ -1,7 +1,6 @@
-import io
-from logging import log, warning
+# from logging import log, warning
 import os
-import glob
+# import glob
 import shutil
 import requests
 import pandas as pd
@@ -12,7 +11,7 @@ import alive_progress
 from bgen_reader import open_bgen
 from pathlib import Path
 from hipsnp.utils import warn, raise_error, logger
-import copy
+# import copy
 from functools import reduce
 
 
@@ -26,7 +25,7 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
         Chormosome number
     datalad_source : str or None, optional
         datalad data source. if None, the directory of chromosome data should
-        be given with data_dir and imputation_dir arguments 
+        be given with data_dir and imputation_dir arguments
         (i.e. <data_dir>/<imputationdir>'), by default
         'ria+http://ukb.ds.inm7.de#~genetic'
     imputationdir : str, optional
@@ -34,7 +33,7 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
          by default 'imputation'
     data_dir : str, optional
         directory to use for the datalad dataset, or data files,
-        by default '/tmp/genetic'. chromosome data will or should be placed on 
+        by default '/tmp/genetic'. chromosome data will or should be placed on
         '<data_dir>/<imputationdir>'
 
     Returns
@@ -45,7 +44,7 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
     list of datalad get output
 
 
-    """ 
+    """
 
     data_dir = Path(data_dir)
 
@@ -61,28 +60,6 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
     if not files:
         raise_error('No files were found on disk for chromosome {c}')
         
-    return files, ds, getout
-
-
-def get_chromosome_old(c, datalad_source=None, imputationdir='imputation', 
-                       data_dir=None):
-    if datalad_source is None or datalad_source == '':
-        # TODO: DONE allow for reading the data from a local directory
-        files = list(Path(data_dir).joinpath(imputationdir).glob('*_c' +
-                                                                 str(c) +
-                                                                 '_*'))
-        ds = None
-        getout = ['datalad not used'] * len(files)
-    else:
-        if data_dir is None or data_dir == '':
-            data_dir = Path('/tmp/genetic')
-
-        ds = datalad.clone(source=datalad_source, path=data_dir)
-        files = list(Path(ds.path).joinpath(imputationdir).glob('*_c' +
-                                                                str(c) +
-                                                                '_*'))
-        getout = ds.get(files)
-
     return files, ds, getout
 
 
@@ -157,7 +134,7 @@ def rsid2chromosome(rsids, chromosomes=None):
             for m in range(len(ens)):
                 if ens[m]['ancestral_allele'] is not None:
                     chromosomes[rs] = ens[m]['seq_region_name']
-    else: # ASK: Do we need this part if we document that chromosome is a str 
+    else:  # ASK: Do we need this part if we document that chromosome is a str
         # or a list of str?
         if len(chromosomes) != len(rsids):
             raise_error('Different amount of rsids and chromosomes')
@@ -172,11 +149,11 @@ def rsid2chromosome(rsids, chromosomes=None):
     return df
 
 
-def rsid2snp_new(rsids, outdir,
-                 datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
-                 qctool=None, datalad_drop=True, datalad_drop_if_got=True,
-                 data_dir=None, force=False, chromosomes=None,
-                 chromosomes_use=None):
+def rsid2snp(rsids, outdir,
+             datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
+             qctool=None, datalad_drop=True, datalad_drop_if_got=True,
+             data_dir=None, force=False, chromosomes=None,
+             chromosomes_use=None):
     """convert rsids to snps
 
     Parameters
@@ -307,326 +284,7 @@ def rsid2snp_new(rsids, outdir,
     return ch_rs, files, ds
 
 
-def rsid2snp(rsids, outdir,
-             datalad_source="ria+http://ukb.ds.inm7.de#~genetic", qctool=None,
-             datalad_drop=True, datalad_drop_if_got=True, data_dir=None,
-             force=False, chromosomes=None, chromosomes_use=None, 
-             outformat='bgen'):
-    """
-    convert rsids to snps
-    rsids: list of rsids or a file with rsids, string or list of strings
-    datalad_source: datalad source, string
-    (default: 'ria+http://ukb.ds.inm7.de#~genetic')
-    qctool: path to qctool, string (default: None, which maps to 'qctool')
-    datalad_drop: whether to drop the datalad dataset after getting the files,
-    bool (default: True)
-    datalad_drop_if_got: whether to drop files only if downloaded with get,
-    bool (default: True)
-    data_dir: directory to use for the (datalad) dataset, string (default:
-    None which maps to '/tmp/genetic')
-    force: whether to force re-calculation (based on output file presence),
-    bool (default: False)
-    chromosomes: list of chromosomes to process, list of strings
-    (default: None which uses all chromosomes)
-    ch_rs: dataframe with columns 'rsids' and 'chromosomes', dataframe
-     (default: None)
-    returns: a pandas dataframe with rsid-chromosome pairs and the vcf files
-    are created in the outdir
-    outformat: output file format 'bgen' or 'vcf', string (default: 'bgen')
-    """
-    assert isinstance(outformat, str) and outformat in ['vcf', 'bgen']
-    # check if qctool is available
-    if qctool is None:
-        qctool = shutil.which('qctool')
-
-    if qctool is None or Path(qctool).is_file() is False:
-        print('qctool is not available')
-        raise
-
-    if not Path(outdir).exists():
-        Path(outdir).mkdir()
-
-    if force is True and list(Path(outdir).iterdir()):
-        print('the output directory must be empty')
-        raise
-
-    # get chromosome of each rsid
-    if chromosomes is not None:
-        assert len(chromosomes) == len(rsids)
-
-    ch_rs = rsid2chromosome(rsids, chromosomes=chromosomes)
-    chromosomes = ch_rs['chromosomes'].tolist()
-    uchromosomes = pd.unique(chromosomes)
-    files = None
-    ds = None
-    print('chromosomes needed: ' + str(uchromosomes) + '\n')
-    for c in range(len(uchromosomes)):
-        ch = uchromosomes[c]
-        # use enumerate(uchromosomes)?
-        if chromosomes_use is not None and ch not in chromosomes_use:
-            print('skipping chromosome ' + str(ch), ' not in the use list')
-            continue
-        file_out = Path(outdir, 'chromosome' + str(ch) + outformat)
-        
-        if force is False and file_out.is_file():
-            print(f'chromosome {ch} output file exists, skipping: {file_out}')
-            continue
-
-        ind = [i for i, x in enumerate(ch_rs['chromosomes'])
-               if x == uchromosomes[c]]
-        rs_ch = [rsids[i] for i in ind]
-        print(f'chromosome {ch} with {len(rs_ch)} rsids')
-        if len(rs_ch) == 0:
-            continue
-
-        if len(rs_ch) < 11:
-            print('rsids: ' + str(rs_ch) + '\n')
-
-        # get the data
-        print('datalad: getting files')
-        files, ds, getout = get_chromosome(ch,
-                                           datalad_source=datalad_source,
-                                           data_dir=data_dir)
-        for fi in range(len(getout)):
-            status = getout[fi]['status']
-            print('datalad: status ' + str(status) + ' file ' + str(files[fi]))
-            if status != 'ok' and status != 'notneeded':
-                print('datalad: error getting file '
-                      + str(fi) + ': ' + str(getout[fi]['path']) + '\n')
-                raise
-
-        # find the bgen and sample files
-        file_bgen = None
-        file_sample = None
-        for fl in files:
-            name, ext = os.path.splitext(fl)
-            if ext == '.bgen':
-                assert file_bgen is None
-                file_bgen = fl
-            elif ext == '.sample':
-                assert file_sample is None
-                file_sample = fl
-
-        assert file_bgen is not None and file_sample is not None
-        file_rsids = Path(outdir, 'rsids_chromosome' + str(ch) + '.txt')
-        df = pd.DataFrame(rs_ch)
-        df.to_csv(file_rsids, index=False, header=False)
-        cmd = (qctool + ' -g ' + str(file_bgen) + ' -s ' + str(file_sample)
-               + ' -incl-rsids ' + str(file_rsids)  + ' -og ' + str(file_out))
-        if outformat == 'bgen':
-            cmd += ' -ofiletype bgen_v1.2 -bgen-bits 8'
-
-        print('running qctool: ' + cmd  + '\n')
-        os.system(cmd)
-
-        if datalad_drop:
-            common_prefix = os.path.commonprefix([files[0], ds.path])
-            files_rel = [os.path.relpath(path, common_prefix)
-                         for path in files]
-            if datalad_drop_if_got:
-                for fi in range(len(getout)):
-                    if getout[fi]['status'] == 'ok' and getout[fi]['type'] == 'file':
-                        print(f'datalad: dropping file {files_rel[fi]}')
-                        ds.drop(files_rel[fi])
-            else:
-                print('datalad: dropping all files\n')
-                ds.drop(files_rel)
-
-        print('done with chromosome ' + str(ch) + '\n')
-
-    return ch_rs, files, ds
-
-
-def read_bgen(files,
-              rsids_as_index=True,
-              no_neg_samples=False,
-              join='inner',
-              verify_integrity=False,
-              probs_in_pd=False,
-              verbose=True):
-    if isinstance(files, str):
-        files = [files]
-
-    # make sure that files exist
-    for f in files:
-        assert Path(f).is_file()
-
-    # read all the files
-    if verbose:
-        print('reading ' + str(len(files)) + ' bgen files... ')
-    probsdata = dict()
-    snpdata = pd.DataFrame()
-    for f in alive_progress.alive_it(files):
-        if verbose:
-            print('reading ' + f)
-        bgen = open_bgen(f, verbose=False)
-        # sanity checks
-        # we can only deal with biallelic variants
-        nalleles = np.unique(bgen.nalleles)
-        assert len(nalleles) == 1 and nalleles[0] == 2
-        probs = bgen.read()  # read the probabilities [samples, snps?, 3]
-
-        tmp = pd.DataFrame(index=range(len(bgen.rsids)))
-        if rsids_as_index:
-            tmp.index = bgen.rsids
-
-        if probs_in_pd:
-            # this is extremely slow
-            print('putting probabilities in the dataframe')
-            for j in range(probs.shape[1]):  # snps
-                for i in range(probs.shape[0]):  # sample
-                    tmp.iloc[j][i] = probs[i, j, :]
-        else:
-            nkey = len(probsdata.keys())
-            probsdata[str(nkey)] = dict()
-            probsdata[str(nkey)]['probs'] = np.array(probs)
-            probsdata[str(nkey)]['samples'] = np.array(bgen.samples)
-            probsdata[str(nkey)]['rsids'] = np.array(bgen.rsids)
-        
-        # add more data
-        # get REF and ALT
-        alleles = bgen.allele_ids
-        alleles = np.array([a.split(',') for a in alleles])
-        tmp = tmp.assign(REF=alleles[:, 0], ALT=alleles[:, 1])
-        tmp = tmp.assign(CHROM=bgen.chromosomes,
-                         POS=bgen.positions,
-                         ID=bgen.ids)
-        tmp['FORMAT'] = 'GP'
-
-        myjoin = join
-        if f == files[0]:
-            myjoin = 'outer'
-
-        snpdata = pd.concat([snpdata, tmp],
-                            join=myjoin,
-                            axis=0,
-                            verify_integrity=verify_integrity)
-        tmp = None
-
-    return snpdata, probsdata
-
-
-def read_bgen_for_Genotype(files, verify_integrity=False):
-
-    """Read bgen files and extract metadata and probabilites
-
-    Parameters
-    ----------
-    files : str or list(str)
-            Files to be read
-    verify_integrity : bool, default False
-            See pandas.concat documentation.
-
-    Returns
-    -------
-        snpdata : pandas DataFrame
-        row indexes: RSIDs; columns: CHROM, POS, ID, and FORMAT
-        probabilites : dict
-        keys: RDIDs, values: tuple(Smaples,
-                                   probilities : numpy array [Samples, 3])
-    """
-    if isinstance(files, str):
-        files = [files]
-
-    if len(files) != len(set(files)):
-        raise_error("There are duplicated bgen files")
-    # make sure that files exist
-    if not all([Path(f).is_file() for f in files]):
-        raise_error('bgen file does not exist', FileNotFoundError())
-
-    # read all the files
-    logger.info(f'Reading {len(files)} bgen files...')
-
-    snpdata = pd.DataFrame()
-    probabilites = dict()
-    for f in alive_progress.alive_it(files):
-        logger.info(f'Reading {f}')
-        with open_bgen(f, verbose=False) as bgen:
-            # we can only deal with biallelic variants
-            if np.any(bgen.nalleles != 2):
-                raise_error('Only biallelic variants are allowed')
-
-            # find duplicate RSIDs within a file
-            _, iX_unique_in_file = np.unique(bgen.rsids, return_index=True)
-            if iX_unique_in_file.shape[0] != bgen.rsids.shape[0]:
-                warn(f'Duplicated RSIDs in file {f}')
-
-            # find duplicates with previous files
-            if not snpdata.empty and np.sum(snpdata.index == bgen.rsids) != 0:
-                warn(f'Files have duplicated RSIDs')
-                # indexes with rsids not previously taken to keep unique RSIDS
-                mask_unique_btwb_files = np.isin(bgen.rsids, snpdata.index,
-                                                 invert=True)
-                mask_to_keep = np.zeros(len(bgen.rsids), dtype=np.bool_)
-                mask_to_keep[iX_unique_in_file[mask_unique_btwb_files]] = True
-            else:
-                mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
-      
-            if any(mask_to_keep):
-                # get REF and ALT
-                # TODO: DONE ref and alt should be A, C, T, or G
-                # alleles = bgen.allele_ids[mask_to_keep]
-                # alleles = np.array([a.split(',') for a in alleles])
-                alleles = np.array(
-                    [val for val in
-                     np.char.split(bgen.allele_ids[mask_to_keep], sep=',')])
-                     
-                if not np.isin(alleles, ['A', 'C', 'T', 'G']).all():
-                    raise_error(f'alleles not "A", "C", "T", or "G"\
-                                  in file {f}')
-
-                # dataframe with metadata of unique RSIDS.
-                tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
-                tmp = tmp.assign(REF=alleles[:, 0],
-                                 ALT=alleles[:, 1],
-                                 CHROM=bgen.chromosomes[mask_to_keep],
-                                 POS=bgen.positions[mask_to_keep],
-                                 ID=bgen.ids[mask_to_keep],
-                                 FORMAT='GP')
-
-                if f == files[0]:
-                    myjoin = 'outer'
-                else:
-                    myjoin = 'inner'
-                # concatenate metadata of files
-                snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0,
-                                    verify_integrity=verify_integrity)
-
-                # crear probabilites data dictionary
-                probs = bgen.read()
-                tmp_probabilites = {k_rsid:
-                                    (np.array(bgen.samples),
-                                     np.squeeze(probs[:, i, :]))
-                                    for i, k_rsid in enumerate(tmp.index) }
-                probabilites.update(tmp_probabilites)
-
-                tmp = None
-
-    return snpdata, probabilites
-
-
 def read_weights(weights):
-    """
-    read weights from a file
-    """
-    if isinstance(weights, str):
-        assert os.path.isfile(weights)
-        weights = pd.read_csv(weights, sep='\t', comment='#')
-    weights.columns = [x.lower() for x in weights.columns]
-    weights.rename(columns={'snpid': 'rsid', 'chr_name': 'chr',
-                            'effect_allele': 'ea', 'effect_weight': 'weight'},
-                   inplace=True)
-
-    assert 'ea' in weights.columns
-    assert 'weight' in weights.columns
-    assert 'rsid' in weights.columns
-    rsids = weights['rsid'].tolist()
-    # make sure that all rsids are unique
-    assert len(rsids) == len(set(rsids))
-    return weights
-
-
-def read_weights_Genotype(weights):
     """read weights from a .csv file
 
     Parameters
@@ -661,208 +319,14 @@ def read_weights_Genotype(weights):
         raise_error(f'Weights contains wrong column names')
     
     if np.sum(weights.index.duplicated()) != 0:
-        warning(f'"weights" has duplicated RSIDs, only the first\
-                    appearane is kept')
+        warn(f'"weights" has duplicated RSIDs, only the first\
+                appearane is kept')
 
     if sum([len(ea) != 1 and isinstance((ea, str))
             for ea in weights['ea']]) != 0:
         raise_error(f'Wrong effect_allele in weights')
 
     return weights
-
-
-def snp2genotype(snpdata, th=0.9, snps=None, samples=None,
-                 genotype_format='allele', probs=None, weights=None,
-                 verbose=True, profiler=None):
-    """
-    given a snp file path(s) or a pandas df from read_vcf/read_bgen
-    returns genotypes and probabilities
-    """
-    if profiler is not None:        
-        profiler.enable()
-
-    assert isinstance(genotype_format, str)
-    assert genotype_format in ['allele', '012']
-
-    if not isinstance(snpdata, pd.DataFrame):
-        print("don't know how to handle the input")
-        print('please use read_vcf or read_bgen to get the required input')
-        raise AttributeError
-
-    nsnp = snpdata.shape[0]
-    ncol = snpdata.shape[1]
-    if samples is None:
-        if verbose:
-            print('no samples specified, using all')
-        if probs is None:
-            samples = [snpdata.columns[i] for i in range(9, ncol)]
-        else:
-            pkeys = list(probs.keys())  # number of bgen files read.
-            samples = probs[pkeys[0]]['samples']
-            for pk in range(1, len(pkeys)):
-                # if there are several bgen files (one per RSID),
-                samples = np.append(samples, probs[pkeys[pk]]['samples'])
-                # the samples of each file are appened togetehr
-                samples = np.unique(samples)
-                # onlyt not repeated samples are kept and sorted
-    else:
-        if probs is None:
-            assert all(sam in snpdata.columns for sam in samples)
-
-    if snps is None:
-        snps = list(snpdata.index)
-    # else:
-    #    assert all(snp in list(snp.index) for s in snps)
-
-    riskscore = None
-    if weights is not None:
-        weights = read_weights(weights)
-        if verbose:
-            print('will calculate riskscore using weights')
-            print(weights.head())
-        riskscore = pd.DataFrame(0.0, columns=range(1), index=samples,
-                                 dtype=float)
-
-    genotype_allele = pd.DataFrame('', columns=snps, index=samples, dtype=str)
-    genotype_012 = pd.DataFrame(np.nan, columns=snps, index=samples,
-                                dtype=float)
-    probability = genotype_012.copy()
-    print('calculating genotypes for ' + str(len(snps)) + ' SNPs and ' +
-          str(len(samples)) + ' samples ... ')
-    for snp in alive_progress.alive_it(snps):
-        # get SNP info
-        try:
-            REF = snpdata['REF'][snp]
-            ALT = snpdata['ALT'][snp]
-            assert len(REF) == 1 and len(ALT) == 1
-            if weights is not None:
-                EA  = weights['ea'][weights['rsid'] == snp].values
-                if len(EA) == 0:
-                    weightSNP = None
-                else:
-                    EA = EA[0]
-                    assert isinstance(EA, str) and len(EA) == 1
-                    weightSNP = weights['weight'][weights['rsid'] == snp].values[0]
-                    weightSNP = float(weightSNP)
-        except Exception as e:
-            if verbose:
-                print('error parsing snp ' + str(snp))
-                print(e)
-            genotype_allele.loc[snp, :] = np.nan
-            genotype_012.loc[snp, :] = np.nan
-            probability.loc[snp, :] = pd.Series([[np.nan] * 3] * len(samples))
-            continue
-        # get a df with probabilities for all the samples
-        GP = None
-        try:
-            if probs is not None:
-                for pk in probs.keys():
-                    if snp in probs[pk]['rsids']:
-                        snpidx = np.where(probs[pk]['rsids'] == snp)
-                        assert len(snpidx) == 1
-                        snpidx = snpidx[0][0]
-
-                        index = probs[pk]['samples']  # samples in probs
-                        index_mask = np.in1d(index, samples)
-                        # boolean of elements in ar1 present in ar2
-                        probs_pk = probs[pk]['probs'][:, snpidx, :]
-                        probs_pk = probs_pk[index_mask]
-                        # why a mask? all samples are taken always because
-                        # the unique samples are kept
-                        # probs is samples x snps x 3
-                        GP = pd.DataFrame(probs_pk, index=index[index_mask],
-                                          columns=range(3))
-                        # GP has [samples x 3] dimensionality
-                        # keep what we need
-                        # todo check if this reorders
-                        # GP = GP.reindex(samples).dropna()
-                        # break
-            # else:
-                # todo: vectorize this
-                # GP = pd.DataFrame(index=samples, columns=range(3))
-                # for sam in samples:
-                #     try:
-                #         gt, gp = parse_GTGP(snpdata[sam][snp])
-                #         GP.loc[sam, :] = gp
-                #     except Exception as e:
-                #         if verbose:
-                #             print('error parsing snp ' + str(snp))
-                #             print(e)
-                #         genotype[sam][snp] = np.nan
-                #         probability[sam][snp] = [np.nan] * 3
-                #         continue
-        except Exception as e:
-            print(e)
-
-        # use GP to calculate genotype
-        imax = np.argmax(GP.values, axis=1)
-        genotype_allele.loc[GP.index[imax == 0], snp] = REF + REF
-        genotype_allele.loc[GP.index[imax == 1], snp] = "".join(sorted(REF
-                                                                       + ALT))
-        genotype_allele.loc[GP.index[imax == 2], snp] = ALT + ALT
-        genotype_012.loc[GP.index, snp] = imax
-
-        # todo fix this
-        # probability.loc[snp, GP.index] = GP.values
-
-        if weights is not None and weightSNP is not None:
-            # todo this is quite slow and maybe incorrect
-            # print('SNP ' + snp + ' EA ' + EA + ' REF ' + REF +\
-            #      ' ALT ' + ALT + ' weight ' + str(weightSNP))
-            dosage = GP2dosage(GP, REF, ALT, EA)
-            # whichever samples have a non-nan dosage get added
-            # all others become NaN which ius good
-            riskscore = riskscore.add(weightSNP * dosage, axis=0)
-
-    if profiler is not None:
-        profiler.disable()
-
-    if weights is None:
-        return genotype_allele, genotype_012, probability
-    else:
-        return genotype_allele, genotype_012, riskscore
-
-
-def GP2dosage(GP, REF, ALT, EA):
-    assert GP.shape[1] == 3
-    if EA == REF:
-        dosage = GP.iloc[:, 1] + 2 * GP.iloc[:, 0]
-    elif EA == ALT:
-        dosage = GP.iloc[:, 1] + 2 * GP.iloc[:, 2]
-    else:
-
-        print('SNP ' + snp + ' ALT ' + ALT + ' or REF ' + REF +
-              'do not match EA ' + EA)
-        raise
-    return dosage
-
-
-# def parse_GTGP(GTGP, format=None):
-#     """
-#     given a GT:GP string, returns GT and an array of three GP
-#     """
-#     assert isinstance(GTGP, str) or isinstance(GTGP, list) or isinstance(GTGP, np.ndarray)
-#     GT = None
-#     if isinstance(GTGP, list) or isinstance(GTGP, np.ndarray):
-#         GP = GTGP
-#     else:
-#         if format is None:
-#             format = ':' in GTGP
-#         if format:
-#             GTGP = GTGP.split(':')
-#             assert len(GTGP) == 2
-#             GT = GTGP[0]
-#             GP = GTGP[1]
-#         else:
-#             GP = GTGP
-
-#         try:
-#             GP = [float(gp) for gp in GP.split(',')]
-#             assert len(GP) == 3
-#         except Exception:
-#             GP = [np.nan, np.nan, np.nan]
-#     GP = np.array(GP)
-#     return GT, GP
 
 
 class Genotype():
@@ -1118,61 +582,9 @@ class Genotype():
             return None
         else:
             out = Genotype(metadata=self.metadata,
-                           probabilities=consol_prob_dict)           
+                           probabilities=consol_prob_dict)
             out._consolidated = True
             return out
-
-    # def _consolidate_samples_intersection(self):
-    #     """Samples and associated probalities of all RSIDs are reordered to
-    #     be consistent acrross all RSIDs. The RSID with the least number of
-    #     samples is used as prdering references for all other RSIDS, samples
-    #     inconsistent across all other RSIDs are discarded. Returns a Genotype
-    #     object and 3D numpy array with all problities """
-    #     # use RSID with the least number of samples to rearange all other RSIDs
-        
-    #     # get RSID with the least number of samples
-    #     least_samples_rsid = min(self._n_samples, key=self._n_samples.get)
-
-    #     consol_prob_dict = {}
-    #     ref_samples_ID = self._samples_ID[least_samples_rsid]
-    #     ref_samples_str = self.probabilities[least_samples_rsid][0]
-
-    #     consol_prob_matrix = np.zeros((len(self.probabilities),  # RSIDs
-    #                                    ref_samples_ID.shape[0],   # Samples
-    #                                    3))                        # 3 probabil.
-    #     idx_not_consolidated  = []
-    #     rsid_not_consolidated = []
-    #     for i, dict_prob in enumerate(self.probabilities.items()):
-    #         _, _, consol_idx = np.intersect1d(ref_samples_ID,
-    #                                           self._samples_ID[dict_prob[0]],
-    #                                           assume_unique=True,
-    #                                           return_indices=True)
-    #         if consol_idx.shape[0] > 0:  # sucessful consolidation
-    #             consol_prob_dict[dict_prob[0]] = (ref_samples_str,
-    #                                               dict_prob[1][1]
-    #                                               [consol_idx, :])
-    #             consol_prob_matrix[i, :, :] =\
-    #                 consol_prob_dict[dict_prob[0]][1]
-    #         else:
-    #             warn(f'RSID {dict_prob[0]} cannot be consolidated as it has\
-    #                 not matching samples with other RSIDs')
-    #             idx_not_consolidated.append(i)
-    #             rsid_not_consolidated.append(dict_prob[0])
-
-    #     # Adjust metadata and matrix of probabilites for not consolidated RSIDs
-    #     if len(idx_not_consolidated) > 0:
-    #         consol_prob_matrix = np.delete(consol_prob_matrix,
-    #                                        idx_not_consolidated, axis=0)
-    #         meta_cosolidated = self._metadata.drop(index=rsid_not_consolidated)
-    #         out_Genotype = Genotype(metadata=meta_cosolidated,
-    #                                 probabilities=consol_prob_dict)
-    #         out_Genotype._consolidated = True
-    #     else:
-    #         out_Genotype = Genotype(metadata=self._metadata,
-    #                                 probabilities=consol_prob_dict)
-    #         out_Genotype._consolidated = True
-    #         out_Genotype._unique_samples = ref_samples_str
-    #     return consol_prob_matrix, out_Genotype
 
     def get_array_of_probabilities(self):
         """Return a 3D array with the probabilties of all RSIDs and samples. If 
@@ -1180,7 +592,7 @@ class Genotype():
 
         Retruns
         -------
-        3D numpy array with rsid by samples by 3 dimensions with probabilites 
+        3D numpy array with rsid by samples by 3 dimensions with probabilites
 
         """
         if not self.is_consolidated:
@@ -1191,8 +603,8 @@ class Genotype():
         return prob_matrix
 
     def _get_array_of_probabilites(self):
-        """Iterate RSIDS over consolidated dictionary of probabilites to build a
-        single 3d numpy array with all the probabiites."""
+        """Iterate RSIDS over consolidated dictionary of probabilites to build
+        a single 3d numpy array with all the probabiites."""
         # TODO: DONE returns 3d matrix of probabilites
         n_samples = list(self.probabilities.values())[0][0].shape[0]
         consol_prob_matrix = np.zeros((len(self.probabilities),  # RSIDs
@@ -1201,44 +613,6 @@ class Genotype():
         for i, sample_prob in enumerate(self.probabilities.values()):
             consol_prob_matrix[i, :, :] = sample_prob[1]
         return consol_prob_matrix
-
-    # def validate_metadata(self, inplace=True):
-    #     """ Check that metadata information has the right format. Return the 
-    #     same Genotype if the filds REF and ALT contain only one lement. 
-    #     Otherwise, remove the RSIDS with worng metadata in the metadata and 
-    #     probability fields and retrun a new instance of Genotype
-    #     """
-    #     # TODO: REMOVE not needed. It is done at read_begen, rais erro if not 
-    #     # a string wth 'A','C','T', or 'G'
-    #     wrong_rsids = []
-    #     for rsid, ref, alt in zip(self.metadata.index,
-    #                               self.metadata['REF'].values,
-    #                               self.metadata['ALT'].values):
-            
-    #         if len(ref) != 1 or len(alt) != 1 or\
-    #            not isinstance(ref, str) or not isinstance(alt, str):
-    #             wrong_rsids.append(rsid)
-        
-    #     if len(wrong_rsids) > 0:
-    #         if inplace:
-    #             self.metadata.drop(index=wrong_rsids, inplace=inplace)
-    #             for rsid in wrong_rsids:
-    #                 self.probabilities.pop(rsid)
-    #             return None
-    #         else:
-    #             metadata = self.metadata.drop(index=wrong_rsids,
-    #                                           inplace=inplace)
-    #             prob = copy.deepcopy(self.probabilities)
-    #             for rsid in wrong_rsids:
-    #                 prob.pop(rsid)
-    #             out = Genotype(metadata=metadata, probabilities=prob)
-    #             return out
-    #     else:
-    #         if inplace:
-    #             return None
-    #         else:
-    #             return self
-    #     # TODO: DONE YEs, validate metadata, at bgen_read
 
     def filter_by_weigths(self, weights, inplace=True):
         # match filter RSIDs with RSIDs in Genotype
@@ -1291,7 +665,7 @@ class Genotype():
         # TODO: Documnet retrun       
         # TODO: DONE uinit test it
         if weights is not None:
-            w = read_weights_Genotype(weights)
+            w = read_weights(weights)
             self.filter_by_weigths(w, inplace=True)
  
         self.filter(samples=samples, rsids=rsids, inplace=True)
@@ -1362,44 +736,8 @@ class Genotype():
             # TODO: DONE return pandas DataFrames? -> YES
             # TODO: DONE adapt unit test to pandas output
 
-    # @staticmethod
-    # def from_bgen_transform(files, rsids_as_index=True, no_neg_samples=False, \
-    #         join='inner', verify_integrity=False, \
-    #         probs_in_pd=False, verbose=True):
-    #     """Read bgen files and return Genotype Obj. It wraps read_bgen as origianaly
-    #     written and transforms output to fit Genotype Obj. This method is 
-    #     substituted by from_bgen()
-
-    #     Args:
-    #         files (str): bgen files
-    #         rsids_as_index (bool, optional): [description]. Defaults to True.
-    #         no_neg_samples (bool, optional): [description]. Defaults to False.
-    #         verify_integrity (bool, optional): [description]. Defaults to False.
-    #         verbose (bool, optional): [description]. Defaults to True.
-
-    #     Returns:
-    #         Genotype: Object with metadata and probabilities
-    #     """  
-
-    #     if isinstance(files, list):
-    #         assert len(files) == len(set(files)),\
-    #             "There are duplicate bgen files"
-      
-    #     metadata, probs = read_bgen(files, rsids_as_index=True,
-    #                                 no_neg_samples=False,
-    #                                 join='inner', verify_integrity=False,
-    #                                 probs_in_pd=False, verbose=True)
-
-    #     probabilities = dict()
-    #     for prob_key in probs:  # iterate bgen files saved to a dict
-    #         for i, rsid in enumerate(probs[prob_key]['rsids']):
-    #             if rsid not in probabilities.keys():
-    #                 probabilities[rsid] = (probs[prob_key]['samples'], 
-    #                                        np.squeeze(probs[prob_key]['probs'][:, i, :]))
-    #     return Genotype(metadata, probabilities)
-
-    @staticmethod
-    def from_bgen(files, verify_integrity=False, verbose=True):
+    @classmethod
+    def from_bgen(cls, files, verify_integrity=False):
         """Read bgen file. Return Genotype object with metadata and probabilites
 
         Parameters
@@ -1408,20 +746,119 @@ class Genotype():
         
         verify_integrity (bool, optional): Check for duplicates. 
             See pandas.concat(). Defaults to False.
-        
-        verbose (bool, optional): addiotinal processing information. 
-            Defaults to True.
 
         Returns
         -------
         Genotype object
-        """                                             
+        """
         metadata, probabilities =\
-            read_bgen_for_Genotype(files=files,
-                                   verify_integrity=verify_integrity,
-                                   verbose=verbose)
+            cls._read_bgen_for_Genotype(files=files,
+                                        verify_integrity=verify_integrity)
 
         return Genotype(metadata, probabilities)
+
+    @staticmethod
+    def _read_bgen_for_Genotype(files, verify_integrity=False):
+
+        """Read bgen files and extract metadata and probabilites
+
+        Parameters
+        ----------
+        files : str or list(str)
+                Files to be read
+        verify_integrity : bool, default False
+                See pandas.concat documentation.
+
+        Returns
+        -------
+            snpdata : pandas DataFrame
+            row indexes: RSIDs; columns: CHROM, POS, ID, and FORMAT
+            probabilites : dict
+            keys: RDIDs, values: tuple(Smaples,
+                                    probilities : numpy array [Samples, 3])
+        """
+        if isinstance(files, str):
+            files = [files]
+
+        if len(files) != len(set(files)):
+            raise_error("There are duplicated bgen files")
+        # make sure that files exist
+        if not all([Path(f).is_file() for f in files]):
+            raise_error('bgen file does not exist', FileNotFoundError())
+
+        # read all the files
+        logger.info(f'Reading {len(files)} bgen files...')
+
+        snpdata = pd.DataFrame()
+        probabilites = dict()
+        for f in alive_progress.alive_it(files):
+            logger.info(f'Reading {f}')
+            with open_bgen(f, verbose=False) as bgen:
+                # we can only deal with biallelic variants
+                if np.any(bgen.nalleles != 2):
+                    raise_error('Only biallelic variants are allowed')
+
+                # find duplicate RSIDs within a file
+                _, iX_unique_in_file = np.unique(bgen.rsids, return_index=True)
+                if iX_unique_in_file.shape[0] != bgen.rsids.shape[0]:
+                    warn(f'Duplicated RSIDs in file {f}')
+
+                # find duplicates with previous files
+                if (not snpdata.empty and
+                        np.sum(snpdata.index == bgen.rsids) != 0):
+                    warn(f'Files have duplicated RSIDs')
+                    # indexes with rsids not previously taken
+                    # to keep unique RSIDS
+                    mask_unique_btwb_files = np.isin(bgen.rsids, snpdata.index,
+                                                     invert=True)
+                    mask_to_keep = np.zeros(len(bgen.rsids), dtype=np.bool_)
+                    mask_to_keep[iX_unique_in_file
+                                 [mask_unique_btwb_files]] = True
+                else:
+                    mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
+        
+                if any(mask_to_keep):
+                    # get REF and ALT
+                    # TODO: DONE ref and alt should be A, C, T, or G
+                    # alleles = bgen.allele_ids[mask_to_keep]
+                    # alleles = np.array([a.split(',') for a in alleles])
+                    alleles = np.array(
+                        [val for val in
+                         np.char.split(bgen.allele_ids[mask_to_keep],
+                                       sep=',')])
+                        
+                    if not np.isin(alleles, ['A', 'C', 'T', 'G']).all():
+                        raise_error(f'alleles not "A", "C", "T", or "G"\
+                                    in file {f}')
+
+                    # dataframe with metadata of unique RSIDS.
+                    tmp = pd.DataFrame(index=bgen.rsids[mask_to_keep])
+                    tmp = tmp.assign(REF=alleles[:, 0],
+                                     ALT=alleles[:, 1],
+                                     CHROM=bgen.chromosomes[mask_to_keep],
+                                     POS=bgen.positions[mask_to_keep],
+                                     ID=bgen.ids[mask_to_keep],
+                                     FORMAT='GP')
+
+                    if f == files[0]:
+                        myjoin = 'outer'
+                    else:
+                        myjoin = 'inner'
+                    # concatenate metadata of files
+                    snpdata = pd.concat([snpdata, tmp], join=myjoin, axis=0,
+                                        verify_integrity=verify_integrity)
+
+                    # crear probabilites data dictionary
+                    probs = bgen.read()
+                    tmp_probabilites = {k_rsid:
+                                        (np.array(bgen.samples),
+                                         np.squeeze(probs[:, i, :]))
+                                         for i, k_rsid in enumerate(tmp.index)}
+                    probabilites.update(tmp_probabilites)
+
+                    tmp = None
+
+        return snpdata, probabilites
 
     @staticmethod
     def _validate_arguments(meta, prob):
@@ -1436,130 +873,11 @@ class Genotype():
         prob : dict of tuples with list of str and numpy array
             Genotype.probabilites atribute
         """
-        if sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT'] for col in meta.columns)) < 6:
+        if sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT']
+                for col in meta.columns)) < 6:
             raise_error("Missign columns in metadata")
         if sorted(meta.index) != sorted(prob.keys()):
             raise_error("Mismatch of RSIDs between metadata and probabilities")
         if any([len(prob[k_key][0]) != prob[k_key][1].shape[0] or
                 prob[k_key][1].shape[1] != 3 for k_key in prob.keys()]):
-            raise_error("Mismatch dimensions between samples and probabilities")
-
-# def snp_Genotype_2genotype(snpdata, gen, th=0.9, snps=None, samples=None, \
-#                 genotype_format='allele', probs=None, weights=None, \
-#                 verbose=True, profiler=None):
-#     """
-#     given a snp file path(s) or a pandas df from read_vcf/read_bgen returns genotypes and probabilities
-#     snpdata: dataFrame given by read_bgen()
-#     snps: ?? if None, list(snpdata.index) -> RSIDS
-#     samples: ?? if None, take the samples from probs -> probs['key]['samples']
-#             and select only those samples that are unique if len(probs.keys()) > 1 == number of BGEN files read before
-#     probs: dictionary with probabilities given by read_bgen() 
-#    Genotype has         
-#         self.metadata = None
-#         self.probabilities = dict()
-#     returns: pd dataframses with everything concatenated?
-#     """
-#     if profiler is not None:        
-#         profiler.enable()
-
-#     if genotype_format not in ['allele', '012']:
-#         raise_error(f'genotype_format should be allele or 012')
-    
-#     if not isinstance(gen, Genotype()):
-#         raise_error(f'gen is not a Genotype object')
-
-#     # TODO: DONE Check weights and get good RSIDs
-#     # if weights is not None:
-#     #     w = read_weights(weights)
-#     #     self.filter_by_weigths(weights, inplace=true)
-
-#     # TODO: DONE filter Genotype by user defined rsids (good ones) and samples
-#     gen = gen.filter(samples=samples, rsids=snps)
-#     # TODO: DONE consolidate 
-#     gen = gen.consolidate()  # organise the object os its fastest
-
-#     # TODO: DONE Filter out bad SNPS
-#     # - Bad SPNS are SPNS
-#     #   - len(REF) != 1 or len(ALT) != 1:
-#     #   - not (EA has one element and is a string)
-     
-
-
-#     snps = gen.rsids
-   
-#     samples = gen.probabilities[snps[0]][0]
-
-#     # Read weights
-#     riskscore = None
-#     if weights is not None:
-#         weights = read_weights(weights)
-#         logger.info(f'Calculate riskscore using weights')
-#         riskscore = pd.DataFrame(0.0, columns=range(1), index=samples, dtype=float)        
-
-#     genotype_allele = pd.DataFrame('', columns=snps, index=samples, dtype=str)
-#     genotype_012 = pd.DataFrame(np.nan, columns=snps, index=samples, dtype=float)
-#     probability = genotype_012.copy()
-
-#     logger.info(f'Calculating genotypes for {len(snps)} SNPs and \
-#                 {len(samples)} samples ... ')
-
-#     for snp in alive_progress.alive_it(snps): # iterate RSIDs
-#         # get SNP info
-#         parsing_error = False
-#         REF = gen.metadata['REF'][snp]
-#         ALT = gen.metadata['ALT'][snp]
-#         if len(REF) != 1 or len(ALT) != 1:
-#             parsing_error = True
-
-#         if weights is not None:
-#             EA  = weights['ea'][weights['rsid'] == snp].values
-#             if len(EA) != 0 and isinstance(EA[0], str) and len(EA[0]) == 1:
-#                 weightSNP = weights['weight'][weights['rsid'] == snp].values[0]
-#                 weightSNP = float(weightSNP)
-#                 EA = EA[0]
-#             else:
-#                 parsing_error = True
-#                 weightSNP = None
-
-#         if parsing_error:
-#             warn(f'Error parsing EA, REF, or ALT in snp {snp}')             
-#             #BUG? Yes
-#             # genotype_allele.loc[snp, :] = np.nan
-#             # genotype_012.loc[snp, :] = np.nan
-#             # probability.loc[snp, :] = pd.Series([[np.nan]*3]*len(samples))
-            
-#             genotype_allele.loc[:, snp] = np.nan
-#             genotype_012.loc[:, snp] = np.nan
-#             probability.loc[:, snp] = pd.Series([[np.nan] * 3] * len(samples))
-#             continue
-
-#         # Use probabilites as numpy arrays (from dictionary tuple) instead of pandas dataframes
-#         GP = gen.probabilities[snp][1]
-#         imax = np.argmax(GP, axis=1) # get index of largest prob form the three values on each smaple of one RSID
-        
-#         genotype_allele.loc[samples[imax==0], snp] = REF + REF
-#         genotype_allele.loc[samples[imax==1], snp] = "".join(sorted(REF + ALT))
-#         genotype_allele.loc[samples[imax==2], snp] = ALT + ALT
-#         genotype_012.loc[samples, snp] = imax
-
-#         probability.loc[:, snp] = pd.Series(GP.tolist()) # TEST
-
-#         # todo fix this
-#         # probability = pd.DataFrame(np.nan, columns=snps, index=samples, dtype=float)
-#         #probability.loc[snp, GP.index] = GP.values # GP.values, get numpy array 
-
-#         if weights is not None and weightSNP is not None:
-#             # TODO DONE this is quite slow and maybe incorrect
-#             dosage = GP2dosage(GP, REF, ALT, EA)            
-#             # whichever samples have a non-nan dosage get added
-#             # all others become NaN which is good        
-#             riskscore = riskscore.add(weightSNP * dosage, axis=0)
-#             # riskscore += weightSNP * dosage
-
-#     if profiler is not None:  
-#         profiler.disable()
-
-#     if weights is None:
-#         return genotype_allele, genotype_012, probability
-#     else:
-#         return genotype_allele, genotype_012, riskscore
+            raise_error("Dimension mismatch between samples and probabilities")

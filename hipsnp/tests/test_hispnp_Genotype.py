@@ -2,15 +2,14 @@ import copy
 import shutil
 import tempfile
 from pathlib import Path
-from typing import get_origin
-
 import datalad.api as dl
 import hipsnp as hps
 import numpy as np
 import pandas as pd
 import pytest
-from attr.validators import in_
 from pandas._testing import assert_frame_equal
+# import hipsnp_origen as hps_o
+from . import hipsnp_origen as hps_o
 
 
 def test_read_bgen_for_Genotype_has_metadata():
@@ -24,13 +23,13 @@ def test_read_bgen_for_Genotype_has_metadata():
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
 
         # original code
-        snpdata, probsdata = hps.read_bgen(files=bgenfile, 
-                                           rsids_as_index=True, 
-                                           no_neg_samples=False, 
-                                           join='inner', 
-                                           verify_integrity=False, 
-                                           probs_in_pd=False,
-                                           verbose=True)
+        snpdata, probsdata = hps_o.read_bgen(files=bgenfile,
+                                             rsids_as_index=True,
+                                             no_neg_samples=False,
+                                             join='inner',
+                                             verify_integrity=False,
+                                             probs_in_pd=False,
+                                             verbose=True)
 
         gen = hps.Genotype.from_bgen(files=[bgenfile])
 
@@ -148,6 +147,7 @@ def test_Genotype__validate_arguments_probability_dimension():
             hps.Genotype(metadata=gen_modified.metadata,
                          probabilities=gen_modified.probabilities)
 
+
 @pytest.mark.parametrize("in_place",
                          [(True),
                           (False)])
@@ -233,9 +233,9 @@ def test_filter_options(in_place):
                                                       inplace=in_place)
 
         n_filt_samples = np.array([prob[0].shape[0] for prob in
-                            gen_filt_rsid_and_sample.probabilities.values()])
+            gen_filt_rsid_and_sample.probabilities.values()])
         n_filt_probs = np.array([prob[1].shape[0] for prob in
-                            gen_filt_rsid_and_sample.probabilities.values()])
+            gen_filt_rsid_and_sample.probabilities.values()])
 
         assert all(n_filt_samples == n_filt_probs)
         assert all(n_filt_samples == n_keep_samples)
@@ -253,6 +253,7 @@ def test_filter_options(in_place):
         assert any(np.isin(gen_ref.metadata.index, keep_rsids ))
         assert all([k_rsid in keep_rsids for k_rsid in
                     gen_filt_rsid_and_sample.probabilities.keys()])
+
 
 @pytest.mark.parametrize("in_place",
                          [(True),
@@ -398,6 +399,7 @@ def test_consolidate_Genotype(in_place):
     with pytest.raises(ValueError):
         gen_mod.consolidate(inplace=True)
 
+
 def test__get_array_of_probabilites():
     # the matrix of probabilites has the right values afeter consoloidating
     # probabilites
@@ -411,11 +413,14 @@ def test__get_array_of_probabilites():
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
         gen = hps.Genotype.from_bgen(files=bgenfile)
 
-    mockprob = np.random.randn(199, 500, 3)  # num. of rsids & samples in source
+    mockprob = np.random.randn(199, 500, 3)  # num. of rsids & samples source
     for i, rsid_val in enumerate(gen.probabilities.items()):
         gen._probabilities[rsid_val[0]] = (rsid_val[1][0],
                                            np.squeeze(mockprob[i, :, :]))
     
+    with pytest.raises(ValueError):
+        gen.get_array_of_probabilities()
+
     gen.consolidate()
     probs = gen.get_array_of_probabilities()
     assert np.array_equal(mockprob, probs)
@@ -429,7 +434,7 @@ def test_filter_by_weigths():
     weights = []
     for wfile in weights_files:
         path_to_file = path_to_weights + wfile
-        file = hps.read_weights_Genotype(path_to_file)
+        file = hps.read_weights(path_to_file)
         weights.append(file)
 
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
@@ -448,7 +453,7 @@ def test_filter_by_weigths():
         else:
             gen.filter_by_weigths(w)
             assert len(gen.rsids) == n_rsid[i]
-            assert  validatePANDAScolumns(w, ['ea', 'weight', 'rsid', 'chr'])
+            assert validatePANDAScolumns(w, ['ea', 'weight', 'rsid', 'chr'])
 
 
 def test_snp2genotype():
@@ -461,23 +466,24 @@ def test_snp2genotype():
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
         gen = hps.Genotype.from_bgen(files=bgenfile)
 
-        snpdata, probsdata = hps.read_bgen(files=bgenfile,
-                                           rsids_as_index=True,
-                                           no_neg_samples=False,
-                                           join='inner',
-                                           verify_integrity=False,
-                                           probs_in_pd=False,
-                                           verbose=True)
+        snpdata, probsdata = hps_o.read_bgen(files=bgenfile,
+                                             rsids_as_index=True,
+                                             no_neg_samples=False,
+                                             join='inner',
+                                             verify_integrity=False,
+                                             probs_in_pd=False,
+                                             verbose=True)
  
-    g_allele_old, g_012_old, prob_old = hps.snp2genotype(snpdata=snpdata,
-                                                         th=0.9,
-                                                         snps=None,
-                                                         samples=None,
-                                                         genotype_format='allele',
-                                                         probs=probsdata,
-                                                         weights=None,
-                                                         verbose=True,
-                                                         profiler=None)
+    g_allele_old, g_012_old, prob_old =\
+        hps_o.snp2genotype(snpdata=snpdata,
+                           th=0.9,
+                           snps=None,
+                           samples=None,
+                           genotype_format='allele',
+                           probs=probsdata,
+                           weights=None,
+                           verbose=True,
+                           profiler=None)
 
     gen.consolidate()
     g_allele, g_012 = gen.snp2genotype()
@@ -488,15 +494,15 @@ def test_snp2genotype():
     assert_frame_equal(g_allele_old.transpose(), g_allele)
     # SOME esceptions about the format need to be added
 
+
 def test_read_weights():
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
     weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv'] 
  
     for wf in weights_files:
         path_w = path_to_weights + wf
-        weights = hps.read_weights_Genotype(path_w)
-        weights_old = hps.read_weights(path_w)
+        weights = hps.read_weights(path_w)
+        weights_old = hps_o.read_weights(path_w)
 
         assert np.all(weights.to_numpy() == weights_old.to_numpy()[:, 1:])
 
@@ -514,13 +520,13 @@ def test_snp2genotype_weigths():
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
         gen = hps.Genotype.from_bgen(files=bgenfile)
 
-        snpdata, probsdata = hps.read_bgen(files=bgenfile,
-                                           rsids_as_index=True,
-                                           no_neg_samples=False,
-                                           join='inner',
-                                           verify_integrity=False,
-                                           probs_in_pd=False,
-                                           verbose=True)
+        snpdata, probsdata = hps_o.read_bgen(files=bgenfile,
+                                             rsids_as_index=True,
+                                             no_neg_samples=False,
+                                             join='inner',
+                                             verify_integrity=False,
+                                             probs_in_pd=False,
+                                             verbose=True)
  
     gen.consolidate()
     gen_ref = copy.deepcopy(gen)
@@ -531,15 +537,16 @@ def test_snp2genotype_weigths():
 
     for wf in weights_files:
         path_w = path_to_weights + wf
-        g_allele_old, g_012_old, risk_old = hps.snp2genotype(snpdata=snpdata,
-                                                             th=0.9,
-                                                             snps=None,
-                                                             samples=None,
-                                                             genotype_format='allele',
-                                                             probs=probsdata,
-                                                             weights=path_w,
-                                                             verbose=True,
-                                                             profiler=None)
+        g_allele_old, g_012_old, risk_old =\
+            hps_o.snp2genotype(snpdata=snpdata,
+                               th=0.9,
+                               snps=None,
+                               samples=None,
+                               genotype_format='allele',
+                               probs=probsdata,
+                               weights=path_w,
+                               verbose=True,
+                               profiler=None)
         gen = copy.deepcopy(gen_ref)
         g_allele, g_012, risk = gen.snp2genotype(weights=path_w)
 
@@ -560,37 +567,40 @@ def test_rsid2snp():
 
     with tempfile.TemporaryDirectory() as tempdir:
 
-        ch_rs_old, files_old, dataL_old = hps.rsid2snp(rsids,
-                                                       outdir=tempdir,
-                                                       datalad_source=source,
-                                                       qctool=qctool,
-                                                       datalad_drop=True,
-                                                       datalad_drop_if_got=True,
-                                                       data_dir=tempdir,
-                                                       force=False,
-                                                       chromosomes=chromosomes,
-                                                       chromosomes_use=None,
-                                                       outformat='bgen')
+        ch_rs_old, files_old, dataL_old =\
+            hps_o.rsid2snp(rsids,
+                           outdir=tempdir,
+                           datalad_source=source,
+                           qctool=qctool,
+                           datalad_drop=True,
+                           datalad_drop_if_got=True,
+                           data_dir=tempdir,
+                           force=False,
+                           chromosomes=chromosomes,
+                           chromosomes_use=None,
+                           outformat='bgen')
     
     with tempfile.TemporaryDirectory() as tempdir:
 
-        ch_rs, files, dataL = hps.rsid2snp_new(rsids,
-                                               outdir=tempdir,
-                                               datalad_source=source,
-                                               qctool=qctool,
-                                               datalad_drop=True,
-                                               datalad_drop_if_got=True,
-                                               data_dir=tempdir,
-                                               force=False,
-                                               chromosomes=chromosomes,
-                                               chromosomes_use=None)
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=True,
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None)
 
     assert ch_rs_old.equals(ch_rs)
+
 
 def test_rsid2snp_no_qstool():
     qctool = None
     with pytest.raises(ValueError):
-        hps.rsid2snp_new(rsids='rs101', outdir='', qctool=qctool)
+        hps.rsid2snp(rsids='rs101', outdir='', qctool=qctool)
+
 
 def test_rsid2snp_noDrop():
     """ original and new function give the same outputs when datalad datasets
@@ -602,30 +612,31 @@ def test_rsid2snp_noDrop():
 
     with tempfile.TemporaryDirectory() as tempdir:
 
-        ch_rs_old, files_old, dataL_old = hps.rsid2snp(rsids,
-                                                       outdir=tempdir,
-                                                       datalad_source=source,
-                                                       qctool=qctool,
-                                                       datalad_drop=False,
-                                                       datalad_drop_if_got=True,
-                                                       data_dir=tempdir,
-                                                       force=False,
-                                                       chromosomes=chromosomes,
-                                                       chromosomes_use=None,
-                                                       outformat='bgen')
+        ch_rs_old, files_old, dataL_old =\
+            hps_o.rsid2snp(rsids,
+                           outdir=tempdir,
+                           datalad_source=source,
+                           qctool=qctool,
+                           datalad_drop=False,
+                           datalad_drop_if_got=True,
+                           data_dir=tempdir,
+                           force=False,
+                           chromosomes=chromosomes,
+                           chromosomes_use=None,
+                           outformat='bgen')
     
     with tempfile.TemporaryDirectory() as tempdir:
 
-        ch_rs, files, dataL = hps.rsid2snp_new(rsids,
-                                               outdir=tempdir,
-                                               datalad_source=source,
-                                               qctool=qctool,
-                                               datalad_drop=False,
-                                               datalad_drop_if_got=True,
-                                               data_dir=tempdir,
-                                               force=False,
-                                               chromosomes=chromosomes,
-                                               chromosomes_use=None)
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=False,
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None)
 
     assert ch_rs_old.equals(ch_rs)
 
@@ -644,18 +655,20 @@ def test_rsid2snp_as_before_Genotype():
 
     with tempfile.TemporaryDirectory() as tempdir:
 
-        ch_rs, files, dataL = hps.rsid2snp_new(rsids,
-                                               outdir=tempdir,
-                                               datalad_source=source,
-                                               qctool=qctool,
-                                               datalad_drop=True,
-                                               datalad_drop_if_got=True,
-                                               data_dir=tempdir,
-                                               force=False,
-                                               chromosomes=chromosomes,
-                                               chromosomes_use=None)
-        filesRef = [tempdir + '/imputation/' + 'example_c' + str(chromosomes[0]) + '_v0.bgen',
-                    tempdir + '/imputation/' + 'example_c' + str(chromosomes[0]) + '_v0.sample']
+        ch_rs, files, dataL = hps.rsid2snp(rsids,
+                                           outdir=tempdir,
+                                           datalad_source=source,
+                                           qctool=qctool,
+                                           datalad_drop=True,
+                                           datalad_drop_if_got=True,
+                                           data_dir=tempdir,
+                                           force=False,
+                                           chromosomes=chromosomes,
+                                           chromosomes_use=None)
+        filesRef = [tempdir + '/imputation/' + 'example_c' +
+                    str(chromosomes[0]) + '_v0.bgen',
+                    tempdir + '/imputation/' + 'example_c' +
+                    str(chromosomes[0]) + '_v0.sample']
 
         assert isinstance(ch_rs, pd.core.frame.DataFrame)
         assert validatePANDAScolumns(ch_rs, ['rsids', 'chromosomes'])
@@ -672,9 +685,9 @@ def test_get_chromosome():
         files, ds, getout = hps.get_chromosome(c=cs,
                                                datalad_source=source,
                                                data_dir=tempdir)
-        files_o, ds_o, getout_o = hps.get_chromosome_old(c=cs,
-                                                         datalad_source=source,
-                                                         data_dir=tempdir)
+        files_o, ds_o, getout_o = hps_o.get_chromosome(c=cs,
+                                                       datalad_source=source,
+                                                       data_dir=tempdir)
         assert files == files_o
         assert ds == ds_o
 
