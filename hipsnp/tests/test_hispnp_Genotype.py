@@ -2,6 +2,7 @@ import copy
 import shutil
 import tempfile
 from pathlib import Path
+from _pytest.python_api import raises
 import datalad.api as dl
 import hipsnp as hps
 import numpy as np
@@ -162,6 +163,8 @@ def test_filter_options(in_place):
                     'sample_005', 'sample_006', 'sample_007', 'sample_008']
     n_keep_samples = len(keep_samples)
 
+    not_a_sample = 'xxxx'
+
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset = dl.clone(source=source, path=tmpdir + '/')
         dataset.get()
@@ -253,6 +256,9 @@ def test_filter_options(in_place):
         assert any(np.isin(gen_ref.metadata.index, keep_rsids ))
         assert all([k_rsid in keep_rsids for k_rsid in
                     gen_filt_rsid_and_sample.probabilities.keys()])
+        # no matchn samples to filter specifications
+        with pytest.raises(ValueError):
+            gen_ref.filter(rsids=None, samples=not_a_sample, inplace=in_place)
 
 
 @pytest.mark.parametrize("in_place",
@@ -400,7 +406,7 @@ def test_consolidate_Genotype(in_place):
         gen_mod.consolidate(inplace=True)
 
 
-def test__get_array_of_probabilites():
+def test__get_array_of_probabilites_and_samples():
     # the matrix of probabilites has the right values afeter consoloidating
     # probabilites
     # generate random probs, create mock Genotype, re order samples, consolidate
@@ -417,13 +423,20 @@ def test__get_array_of_probabilites():
     for i, rsid_val in enumerate(gen.probabilities.items()):
         gen._probabilities[rsid_val[0]] = (rsid_val[1][0],
                                            np.squeeze(mockprob[i, :, :]))
-    
+
     with pytest.raises(ValueError):
         gen.get_array_of_probabilities()
+
+    with pytest.raises(ValueError):
+        gen.unique_samples()
 
     gen.consolidate()
     probs = gen.get_array_of_probabilities()
     assert np.array_equal(mockprob, probs)
+   
+    samples = gen.unique_samples()
+    assert isinstance(samples[0], str)
+    assert samples.shape[0] == 500
 
 
 def test_filter_by_weigths():
@@ -637,7 +650,29 @@ def test_rsid2snp_noDrop():
                                            force=False,
                                            chromosomes=chromosomes,
                                            chromosomes_use=None)
+        # path to save files is not empty
+        with pytest.raises(ValueError):
+            hps.rsid2snp(rsids, outdir=tempdir, datalad_source=source,
+                         qctool=qctool, datalad_drop=False,
+                         datalad_drop_if_got=True, data_dir=tempdir, 
+                         force=True,  # now we force
+                         chromosomes=chromosomes, chromosomes_use=None)
 
+    assert ch_rs_old.equals(ch_rs)
+
+    # chromosomes to be used do not match rsids
+    ch_use = ['123456', '7654321']
+    ch_rs, files, dataL = hps.rsid2snp(rsids, outdir=tempdir, 
+                                       datalad_source=source,
+                                       qctool=qctool, datalad_drop=False,
+                                       datalad_drop_if_got=True,
+                                       data_dir=tempdir, force=False,
+                                       chromosomes=chromosomes,
+                                       chromosomes_use=ch_use) 
+                                       # chromosomes to be used
+
+    assert files is None
+    assert dataL is None
     assert ch_rs_old.equals(ch_rs)
 
 

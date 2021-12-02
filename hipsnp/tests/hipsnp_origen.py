@@ -1,7 +1,4 @@
-import io
-from logging import log, warning
 import os
-import glob
 import shutil
 import requests
 import pandas as pd
@@ -11,15 +8,14 @@ from datalad import api as datalad
 import alive_progress
 from bgen_reader import open_bgen
 from pathlib import Path
-from hipsnp.utils import warn, raise_error, logger
 import copy
-from functools import reduce
 
 # This file contain the original code before refactoring that is used to test
 # that the refactored code gives the same results as the original code
 
+
 def get_chromosome(c, datalad_source=None, imputationdir='imputation', 
-                       data_dir=None):
+                   data_dir=None):
     if datalad_source is None or datalad_source == '':
         # TODO: DONE allow for reading the data from a local directory
         files = list(Path(data_dir).joinpath(imputationdir).glob('*_c' +

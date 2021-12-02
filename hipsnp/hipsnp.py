@@ -154,14 +154,17 @@ def rsid2snp(rsids, outdir,
              qctool=None, datalad_drop=True, datalad_drop_if_got=True,
              data_dir=None, force=False, chromosomes=None,
              chromosomes_use=None):
-    """convert rsids to snps
+             # ASK: chromosomes_use does not affect to the returned pandas
+             # DataFrame. Is this the wanted behavior? should it filter the 
+             # DataFrame by wanted chromosomes?
+    """convert rsids to snps with qctool v2
 
     Parameters
     ----------
     rsids : str or list of str
         list of rsids 
-    outdir : [type]
-        [description]
+    outdir : str
+        path to same snp files
     datalad_source : str, optional
         datalad data source, by default "ria+http://ukb.ds.inm7.de#~genetic"
     qctool : str, optional
@@ -179,13 +182,18 @@ def rsid2snp(rsids, outdir,
     chromosomes : list of str, optional
         list of chromosomes to process, by default None which uses all
         chromosomes
-    chromosomes_use : [type], optional
-        [description], by default None
+    chromosomes_use : str or list of str, optional
+        subset of chromosomes to use, by default None that uses all chromosomes
 
     Returns
     -------
     pandas DataFrame
         pandas dataframe with rsid-chromosome pairs
+
+    Notes
+    -----
+    qctool must be installed (see https://www.well.ox.ac.uk/~gav/qctool/)
+
     """ 
     # check if qctool is available
     if qctool is None or Path(qctool).is_file() is False:
@@ -195,7 +203,7 @@ def rsid2snp(rsids, outdir,
 
     if not Path(outdir).exists():
         Path(outdir).mkdir()
-
+    # ASK: froce only checks that output dir is empty. Should it do anything else?
     if force is True and list(Path(outdir).iterdir()):
         raise_error(f'the output directory must be empty')
 
@@ -301,7 +309,6 @@ def read_weights(weights):
     -------
     ValueErthe CSV does not contain reuired fields or infromation is worng
     """
-    pathw = (weights)
     try:
         weights = pd.read_csv(weights, sep='\t', comment='#')
         weights.columns = [x.lower() for x in weights.columns]
