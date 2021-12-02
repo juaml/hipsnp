@@ -1,15 +1,17 @@
-from typing import get_origin
-from attr.validators import in_
-import pytest
-import hipsnp as hps
-import datalad.api as dl
-import tempfile
-import pandas as pd
-from pandas._testing import assert_frame_equal
-import numpy as np
-import shutil
 import copy
+import shutil
+import tempfile
 from pathlib import Path
+from typing import get_origin
+
+import datalad.api as dl
+import hipsnp as hps
+import numpy as np
+import pandas as pd
+import pytest
+from attr.validators import in_
+from pandas._testing import assert_frame_equal
+
 
 def test_read_bgen_for_Genotype_has_metadata():
     """Bgen returned as Genotype object with expected fields and dymensions"""
@@ -486,6 +488,19 @@ def test_snp2genotype():
     assert_frame_equal(g_allele_old.transpose(), g_allele)
     # SOME esceptions about the format need to be added
 
+def test_read_weights():
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
+    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv'] 
+ 
+    for wf in weights_files:
+        path_w = path_to_weights + wf
+        weights = hps.read_weights_Genotype(path_w)
+        weights_old = hps.read_weights(path_w)
+
+        assert np.all(weights.to_numpy() == weights_old.to_numpy()[:, 1:])
+
+
 def test_snp2genotype_weigths():
     """Compare outputs of snp2genotyp in Genotype object ans as initial function
     when weights are given"""
@@ -572,6 +587,10 @@ def test_rsid2snp():
 
     assert ch_rs_old.equals(ch_rs)
 
+def test_rsid2snp_no_qstool():
+    qctool = None
+    with pytest.raises(ValueError):
+        hps.rsid2snp_new(rsids='rs101', outdir='', qctool=qctool)
 
 def test_rsid2snp_noDrop():
     """ original and new function give the same outputs when datalad datasets
@@ -729,3 +748,19 @@ def test_ensembl_human_rsid_has_alleles_captures_give_integer():
             hps.ensembl_human_rsid(rsid)
 
 
+def test_ensembl_human_rsid_read_RSIDs_csv_and_PGS():
+    """rsids given with a csv file"""
+    pathfiles = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
+    rsidFile =  pathfiles + 'rsid_699_102.csv'
+    rsid = ['rs699', 'rs102']
+    # ASK: data test files are stored locally, is there a better way to do it? 
+    out_str = hps.rsid2chromosome(rsid)
+    out_f = hps.rsid2chromosome(rsidFile)
+        
+    assert_frame_equal(out_str, out_f)
+
+    pgsfile = pathfiles + 'weights_PGS000001.txt'
+    out_pgs = hps.rsid2chromosome(pgsfile)
+    
+    assert isinstance(out_pgs, pd.core.frame.DataFrame)
+    assert out_pgs.shape[0] == 77
