@@ -107,8 +107,7 @@ def rsid2chromosome(rsids, chromosomes=None):
             for m in range(len(ens)):
                 if ens[m]['ancestral_allele'] is not None:
                     chromosomes[rs] = ens[m]['seq_region_name']
-    else: # ASK: Do we need this part if we document that chromosome is a str 
-        # or a list of str?
+    else:
         if len(chromosomes) != len(rsids):
             raise_error('Different amount of rsids and chromosomes')
 

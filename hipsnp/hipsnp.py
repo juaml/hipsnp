@@ -6,14 +6,13 @@ import requests
 import pandas as pd
 import numpy as np
 from datalad import api as datalad
-# from alive_progress import alive_it
-import alive_progress
 from bgen_reader import open_bgen
 from pathlib import Path
 from hipsnp.utils import warn, raise_error, logger
-# import copy
+import copy
 from functools import reduce
 
+# TODO: if condition is empty list, make explicit len(list) == 0
 
 def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
                    imputation_dir='imputation', data_dir='/tmp/genetic'):
@@ -45,20 +44,19 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
 
 
     """
-
     data_dir = Path(data_dir)
 
     if datalad_source:
         ds = datalad.clone(source=datalad_source, path=data_dir)
-        files = list(data_dir.joinpath(imputation_dir).glob('*_c' + c + '_*'))
+        files = list(data_dir.joinpath(imputation_dir).glob(f'*_c{c}_*'))
         getout = ds.get(files)
     else:
         ds = None
-        files = list(data_dir.joinpath(imputation_dir).glob('*_c' + c + '_*'))
+        files = list(data_dir.joinpath(imputation_dir).glob(f'*_c{c}_*'))
         getout = ['datalad not used'] * len(files)
     
-    if not files:
-        raise_error('No files were found on disk for chromosome {c}')
+    if len(files) == 0:
+        raise_error(f'No files were found on disk for chromosome {c}')
         
     return files, ds, getout
 
@@ -118,7 +116,7 @@ def rsid2chromosome(rsids, chromosomes=None):
             # this check provides support for PGS files
             if isinstance(rsids.iloc[0, 1], str):
                 rsids.drop(index=0, inplace=True)
-            chromosomes = list(rsids.iloc[:, 1])
+            chromosomes = list(rsids.iloc[:, 1]) # .astype('str') ?
             chromosomes = [str(c) for c in chromosomes]
         rsids = list(rsids.iloc[:, 0])
     elif isinstance(rsids, str):
@@ -134,10 +132,10 @@ def rsid2chromosome(rsids, chromosomes=None):
             for m in range(len(ens)):
                 if ens[m]['ancestral_allele'] is not None:
                     chromosomes[rs] = ens[m]['seq_region_name']
-    else:  # ASK: Do we need this part if we document that chromosome is a str
-        # or a list of str?
+    else: 
         if len(chromosomes) != len(rsids):
-            raise_error('Different amount of rsids and chromosomes')
+            raise_error(f'Different amount of rsids {len(rsids)} \
+                          and chromosomes {len(chromosomes)}')
 
         if isinstance(chromosomes, str) or isinstance(chromosomes, int):
             chromosomes = [chromosomes]
@@ -148,16 +146,19 @@ def rsid2chromosome(rsids, chromosomes=None):
     df['rsids'] = rsids
     return df
 
+# def rsid_to_bgen() # TODO: DONE rename rsid2snp -> sid_to_bgen
+def rsid_to_bgen(rsids, outdir,
+                 datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
+                 qctool=None, datalad_drop=True, datalad_drop_if_got=True,
+                 data_dir=None, recompute=False, chromosomes=None,
+                 chromosomes_use=None):
+                 # ASK: chromosomes_use does not affect to the returned pandas
+                 # DataFrame. Is this the wanted behavior? should it filter the 
+                 # DataFrame by wanted chromosomes?
+                 # TODO: DONE change it to filter all outputs
 
-def rsid2snp(rsids, outdir,
-             datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
-             qctool=None, datalad_drop=True, datalad_drop_if_got=True,
-             data_dir=None, force=False, chromosomes=None,
-             chromosomes_use=None):
-             # ASK: chromosomes_use does not affect to the returned pandas
-             # DataFrame. Is this the wanted behavior? should it filter the 
-             # DataFrame by wanted chromosomes?
-    """convert rsids to snps with qctool v2
+                 # TODO: DONE change force name by recompute and set default to False
+    """convert rsids to snps in BGEN format with qctool v2
 
     Parameters
     ----------
@@ -176,14 +177,14 @@ def rsid2snp(rsids, outdir,
         whether to drop files only if downloaded with get, by default True
     data_dir : str, optional
         directory to use for the (datalad) dataset, by default None
-    force : bool, optional
-        whether to force re-calculation (based on output file presence),
+    recompute : bool, optional
+        whether to recompute re-calculation (based on output file presence),
         by default False
     chromosomes : list of str, optional
         list of chromosomes to process, by default None which uses all
         chromosomes
     chromosomes_use : str or list of str, optional
-        subset of chromosomes to use, by default None that uses all chromosomes
+        subset of chromosomes to use, by default None which uses all chromosomes
 
     Returns
     -------
@@ -203,8 +204,7 @@ def rsid2snp(rsids, outdir,
 
     if not Path(outdir).exists():
         Path(outdir).mkdir()
-    # ASK: froce only checks that output dir is empty. Should it do anything else?
-    if force is True and list(Path(outdir).iterdir()):
+    if recompute is True and list(Path(outdir).iterdir()):
         raise_error(f'the output directory must be empty')
 
     # get chromosome of each rsid
@@ -212,23 +212,28 @@ def rsid2snp(rsids, outdir,
         raise_error('Mismatch between the number of chrmosomes and rsids')
 
     ch_rs = rsid2chromosome(rsids, chromosomes=chromosomes)
+    if chromosomes_use is not None:
+        ch_rs = ch_rs[ch_rs.chromosomes.isin(chromosomes_use)]
+
     uchromosomes = ch_rs['chromosomes'].unique()
     files = None
     ds = None
     logger.info(f'Chromosomes needed: {uchromosomes}')
     for c, ch in enumerate(uchromosomes):
-        if chromosomes_use and ch not in chromosomes_use:
-            warn(f'Chromosome {ch} not in the use list, skipping it')
-            continue
+        # if chromosomes_use and ch not in chromosomes_use:
+        #     # TODO: check julearn how to catch warnings with pytest
+        #     warn(f'Chromosome {ch} not in the use list, skipping it')
+        #     continue
         file_out = Path(outdir, 'chromosome' + str(ch) + 'bgen')
 
-        if force is False and file_out.is_file():
-            warn(f'chromosome {ch} output file exists, skipping: {file_out}')
+        if recompute is False and file_out.is_file():
+            warn(f'chromosome {ch} output file exists. It will not be \
+                  recomputed. Skipping: {file_out}')
             continue
 
         rs_ch = [rsids[i] for i, ch_x in enumerate(ch_rs['chromosomes'])
                  if ch_x == ch]
-        if not rs_ch:
+        if len(rs_ch) == 0:
             warn(f'Chromosome {ch} not matching list of chromosomes,\
                    skipping it')
             continue
@@ -310,7 +315,8 @@ def read_weights(weights):
     ValueErthe CSV does not contain reuired fields or infromation is worng
     """
     try:
-        weights = pd.read_csv(weights, sep='\t', comment='#')
+        weights = pd.read_csv(weights, sep='\t', comment='#',
+                              converters={'effect_allele': np.char.upper})
         weights.columns = [x.lower() for x in weights.columns]
         weights.rename(columns={'snpid': 'rsid', 'chr_name': 'chr',
                                 'effect_allele': 'ea',
@@ -326,10 +332,16 @@ def read_weights(weights):
         raise_error(f'Weights contains wrong column names')
     
     if np.sum(weights.index.duplicated()) != 0:
+        weights = weights.loc[~weights.index.duplicated()]
         warn(f'"weights" has duplicated RSIDs, only the first\
-                appearane is kept')
+                appearane will be kept')
+    # TODO: DONE allow for upper and lower case for ['A', 'C', 'T', 'G'] and 
+    # ['a', 'c', 't', 'g']. Start by trasnforming to uppercase, so no check of
+    # lower case is needed.
+    if not np.isin(weights['ea'], ['A', 'C', 'T', 'G']).all():
+        raise_error(f'effect allelel in weights is not "A", "C", "T", or "G"')
 
-    if sum([len(ea) != 1 and isinstance((ea, str))
+    if sum([(len(ea) != 1 or not isinstance(ea, str))
             for ea in weights['ea']]) != 0:
         raise_error(f'Wrong effect_allele in weights')
 
@@ -421,7 +433,7 @@ class Genotype():
         """
         # TODO: DONE make possible that filter happnes inplace
         if rsids is None and samples is None:
-            return self
+            return copy.deepcopy(self)
         if inplace:
             self._filter_by_rsids(rsids=rsids, inplace=inplace)
             self._filter_by_samples(samples=samples, inplace=inplace)
@@ -652,6 +664,144 @@ class Genotype():
             out = self._filter_by_rsids(rsids=rsids, inplace=inplace)
             return out
 
+    def rsid_to_genotype(self, rsids=None, samples=None):
+        """Get alleles for a Genotype and if weiths are given it computes the 
+        risck scores.
+
+        Parameters
+        ----------
+        rsids : list of str, optional
+            rsids to be used, by default None
+        samples : list of str, optional
+            Samples to be used, by default None
+        weights : str, optional
+            Path to CSV file with weights, by default None
+
+        Returns
+        -------
+        
+        """
+        # TODO: Documnet retrun       
+        # TODO:  uinit test it
+ 
+        # ASK: should we filter here, or expected filterd genotype
+        #  (previous user step)
+        gen_filt = self.filter(samples=samples, rsids=rsids, inplace=False)
+
+        if not gen_filt.is_consolidated:
+            gen_filt.consolidate(inplace=True)
+
+        probs = gen_filt.get_array_of_probabilities()  # pribate
+
+        # TODO: DONE Filter out bad SNPS
+
+        n_rsid = len(gen_filt.rsids)
+        samples = gen_filt.probabilities[gen_filt.rsids[0]][0]
+        n_sample = len(samples)
+
+        logger.info(f'Calculating genotypes for {n_rsid} SNPs and \
+                    {n_sample} samples ... ')
+
+        genotype_allele = np.empty((n_rsid, n_sample), dtype=object)
+        genotype_012 = np.zeros((n_rsid, n_sample), dtype=int)
+
+        # resahpe to allow for straight indexing
+        ref = np.tile(gen_filt.metadata['REF'].to_numpy(), (n_sample, 1)).T
+        alt = np.tile(gen_filt.metadata['ALT'].to_numpy(), (n_sample, 1)).T
+
+        i_max_p = np.argmax(probs, axis=2)
+        genotype_allele[i_max_p == 0] = ref[i_max_p == 0] + ref[i_max_p == 0]
+        
+        # Sort needs a single array, but to add characters it needs two arrays 
+        tmp = np.split(np.sort(np.vstack((ref[i_max_p == 1],
+                                          alt[i_max_p == 1])).astype(str),
+                               axis=1),
+                       2, axis=0)
+        g_allele = np.squeeze(np.char.add(tmp[0], tmp[1]))
+        genotype_allele[i_max_p == 1] = g_allele
+
+        genotype_allele[i_max_p == 2] = alt[i_max_p == 2] + alt[i_max_p == 2]
+        genotype_012 = i_max_p
+
+        genotype_allele = pd.DataFrame(data=genotype_allele,
+                                       index=gen_filt.rsids,
+                                       columns=samples)
+        genotype_012 = pd.DataFrame(data=genotype_012,
+                                    index=gen_filt.rsids,
+                                    columns=samples)
+
+        return genotype_allele, genotype_012
+
+    def rsid_to_riskscore(self, weights, rsids=None, samples=None):
+        """ Obtain risk score and dosage from Genotype object
+
+        Parameters
+        ----------
+        weights : str,
+            Path to CSV file with weights
+        rsids : list of str, optional
+            rsids to be used, by default None
+        samples : list of str, optional
+            Samples to be used, by default None
+
+
+        Returns
+        -------
+        dosage : pandas DataFrame
+            Dataframe with the dosage by rsid and samples
+        riskscore : pandas DataFrame
+            DataFrame with risksocre by samples
+        """
+        weights = read_weights(weights)
+        # self.filter_by_weigths(w, inplace=True)
+
+        if rsids is not None:
+            if isinstance(rsids, str):
+                rsids = [rsids]
+            rsids.extend(weights.index.to_list()) 
+            # add to the rsids to be filter the rsids in weights file
+                                                
+        gen_filt = self.filter(samples=samples, rsids=rsids, inplace=False)
+
+        if not gen_filt.is_consolidated:
+            gen_filt.consolidate(inplace=True)
+
+        n_rsid = len(gen_filt.rsids)
+        samples = gen_filt.probabilities[gen_filt.rsids[0]][0]
+        n_sample = len(samples)
+
+        logger.info(f'Calculating riskscore for {n_rsid} SNPs and \
+                    {n_sample} samples ... ')
+
+        ref = np.tile(gen_filt.metadata['REF'].to_numpy(), (n_sample, 1)).T
+        alt = np.tile(gen_filt.metadata['ALT'].to_numpy(), (n_sample, 1)).T
+        probs = gen_filt.get_array_of_probabilities()
+
+        ea = weights['ea'].to_numpy()
+        ea = np.tile(ea, (n_sample, 1)).T
+
+        # compute individual dosage
+        mask_ea_eq_ref = ea == ref
+        mask_ea_eq_alt = ea == alt
+
+        dosage = np.zeros((n_rsid, n_sample))
+        dosage[mask_ea_eq_ref] = (probs[mask_ea_eq_ref, 1]
+                                  + 2 * probs[mask_ea_eq_ref, 0])
+        dosage[mask_ea_eq_alt] = (probs[mask_ea_eq_alt, 1]
+                                  + 2 * probs[mask_ea_eq_alt, 2])
+
+        wSNP = weights['weight'].to_numpy().astype(float).reshape(n_rsid, 1)
+        riskscore = np.sum(dosage * wSNP, axis=0)
+
+        dosage = pd.DataFrame(data=dosage,
+                              index=samples,
+                              columns=gen_filt.rsids)
+        riskscore = pd.DataFrame(data=riskscore,
+                                 index=samples)
+        return dosage, riskscore
+        # TODO: unitest it
+
+
     def snp2genotype(self, rsids=None, samples=None, weights=None):
         """Get alleles for a Genotype and if weiths are given it computes the 
         risck scores.
@@ -718,6 +868,8 @@ class Genotype():
         genotype_012 = pd.DataFrame(data=genotype_012,
                                     index=self.rsids,
                                     columns=samples)
+        # TODO: make two functions, one returns genotype_* and the oother one re
+        # returns the dosage and riskscore
         if weights is not None:
             ea = w['ea'].to_numpy()
             ea = np.tile(ea, (n_sample, 1)).T
@@ -798,7 +950,7 @@ class Genotype():
 
         snpdata = pd.DataFrame()
         probabilites = dict()
-        for f in alive_progress.alive_it(files):
+        for f in files:
             logger.info(f'Reading {f}')
             with open_bgen(f, verbose=False) as bgen:
                 # we can only deal with biallelic variants
@@ -830,7 +982,7 @@ class Genotype():
                     # alleles = bgen.allele_ids[mask_to_keep]
                     # alleles = np.array([a.split(',') for a in alleles])
                     alleles = np.array(
-                        [val for val in
+                        [np.char.upper(val) for val in
                          np.char.split(bgen.allele_ids[mask_to_keep],
                                        sep=',')])
                         
