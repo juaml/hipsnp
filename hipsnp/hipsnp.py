@@ -405,13 +405,18 @@ class Genotype():
         uniq_samples = self.probabilities[self.rsids[0]][0]
         return uniq_samples
 
-    def filter(self, rsids=None, samples=None, inplace=True):
+    def filter(self, rsids=None, samples=None, weights=None, inplace=True):
         """Filter Genotype data object by Samples
 
         Parameters
         ----------
+        rsids : str or list of str | None
+            rsids to keep. If None, does not filter (default).
         samples : str or list of str | None
             Samples to keep. If None, does not filter (default).
+        weights : str or DataFrame, default None
+            path to the csv file with the weigths or pandas DataFrame with
+            weightis as provided by read_weigts()
         inplace: bool
             If True retruns the same object, otherwise returns a new object
 
@@ -432,8 +437,18 @@ class Genotype():
         a copy of it.
         """
         # TODO: DONE make possible that filter happnes inplace
-        if rsids is None and samples is None:
-            return copy.deepcopy(self)
+        if rsids is None and samples is None and filter is None:
+            return self
+        
+        if isinstance(weights, str):
+            weights = read_weights(weights)
+        
+        if weights is not None:
+            rsids_weights = weights.index.to_list()
+            if isinstance(rsids, str):
+                rsids = [rsids]
+            rsids = list(set(rsids.extend(rsids_weights)))
+
         if inplace:
             self._filter_by_rsids(rsids=rsids, inplace=inplace)
             self._filter_by_samples(samples=samples, inplace=inplace)
@@ -752,16 +767,11 @@ class Genotype():
         riskscore : pandas DataFrame
             DataFrame with risksocre by samples
         """
-        weights = read_weights(weights)
-        # self.filter_by_weigths(w, inplace=True)
-
-        if rsids is not None:
-            if isinstance(rsids, str):
-                rsids = [rsids]
-            rsids.extend(weights.index.to_list()) 
-            # add to the rsids to be filter the rsids in weights file
                                                 
-        gen_filt = self.filter(samples=samples, rsids=rsids, inplace=False)
+        gen_filt = copy.deepcopy(self.filter(samples=samples,
+                                             rsids=rsids,
+                                             weights=weights,
+                                             inplace=False))
 
         if not gen_filt.is_consolidated:
             gen_filt.consolidate(inplace=True)
