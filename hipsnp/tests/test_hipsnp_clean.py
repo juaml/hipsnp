@@ -9,38 +9,17 @@ import numpy as np
 import pandas as pd
 import pytest
 from pandas._testing import assert_frame_equal
+
+# from hipsnp.hipsnp import Genotype
 # import hipsnp_origen as hps_o
-from . import hipsnp_origen as hps_o
 
-# TODO: hard code expected results are given by the functions in test.
-# make very small Genotype object to compute manualy the resutls.
+# This test does not compare the ouputs of the previous verions to the latest.
+# This test is intended to be a stand alone test for final package
 
-def test_read_bgen_for_Genotype_has_metadata():
-    """Bgen returned as Genotype object with expected fields and dymensions"""
 
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    with tempfile.TemporaryDirectory() as tmpdir:
-        print(tmpdir + '/')
-        dataset = dl.clone(source=source, path=tmpdir + '/')
-        dataset.get()
-        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
-
-        # original code
-        snpdata, probsdata = hps_o.read_bgen(files=bgenfile,
-                                             rsids_as_index=True,
-                                             no_neg_samples=False,
-                                             join='inner',
-                                             verify_integrity=False,
-                                             probs_in_pd=False,
-                                             verbose=True)
-
-        gen = hps.Genotype.from_bgen(files=[bgenfile])
-
-        assert_frame_equal(snpdata, gen.metadata)
-
-        # probabilites sum to one
-        assert all([np.nanmean(np.sum(gen.probabilities[k_key][1], axis=1))
-                    == 1 for k_key in gen.probabilities.keys()])
+def validatePANDAScolumns(outPANDAS, refColFields):
+    outFields = [field for field in outPANDAS.columns]
+    return refColFields.sort() == outFields.sort()
 
 
 def test_from_bgen_multiple_idnetical_files():
@@ -154,7 +133,7 @@ def test_Genotype__validate_arguments_probability_dimension():
 @pytest.mark.parametrize("in_place",
                          [(True),
                           (False)])
-def test_filter_options(in_place):
+def test_filter_options_no_weights(in_place):
     """Test if the filtered out elements are not in the Gentype Object"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
@@ -261,6 +240,112 @@ def test_filter_options(in_place):
         # no matchn samples to filter specifications
         with pytest.raises(ValueError):
             gen_ref.filter(rsids=None, samples=not_a_sample, inplace=in_place)
+
+
+@pytest.mark.parametrize("in_place",
+                         [(True),
+                          (False)])
+def test_filter_only_weigths(in_place):
+    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
+    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv', 
+                     'weights_noMatchRSID.csv', ]
+    n_rsid = [5, 100, 199, 0]
+    weights = []
+    for wfile in weights_files:
+        path_to_file = path_to_weights + wfile
+        file = hps.read_weights(path_to_file)
+        weights.append(file)
+
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen_ref = hps.Genotype.from_bgen(files=bgenfile)
+
+    for i, w in enumerate(weights):
+        gen = copy.deepcopy(gen_ref)
+        if n_rsid[i] == 0:
+            with pytest.raises(ValueError):
+                gen.filter(weights=w)
+
+        else:
+            if in_place:
+                gen.filter(weights=w, inplace=in_place)
+                assert len(gen.rsids) == n_rsid[i]
+                assert validatePANDAScolumns(w,
+                                             ['ea', 'weight', 'rsid', 'chr'])
+            else:
+                gen_filt = gen.filter(weights=w, inplace=in_place)
+                assert len(gen_filt.rsids) == n_rsid[i]
+
+
+@pytest.mark.parametrize("in_place",
+                         [(True),
+                          (False)])
+def test_filter_rsids_weights(in_place):
+
+    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
+    weights_files = ['weights_5.csv', 'weights_5_unsortedRSID.csv',
+                     'weights_5_duplicatedRSID.csv']
+    
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen_ref = hps.Genotype.from_bgen(files=bgenfile)
+
+        # test 1. Less rsids in weights
+        rsids_weights_5 = ['RSID_2', 'RSID_3', 'RSID_5', 'RSID_6', 'RSID_7']
+        rsids_weights_dup = ['RSID_2', 'RSID_5', 'RSID_6', 'RSID_7']
+        keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
+                      'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']
+        gen = copy.deepcopy(gen_ref)
+        for file in weights_files:
+            w = path_to_weights + file
+            if in_place:
+                gen.filter(rsids=keep_rsids, weights=w, inplace=in_place)
+                gen_filt = gen
+            else:
+                gen_filt = gen.filter(rsids=keep_rsids, weights=w,
+                                      inplace=in_place)
+            if file != 'weights_5_duplicatedRSID.csv':
+                assert (sorted(gen_filt.probabilities.keys()) ==
+                        sorted(rsids_weights_5))
+                assert (sorted(gen_filt.metadata.index) ==
+                        sorted(rsids_weights_5))
+            else:
+                assert (sorted(gen_filt.probabilities.keys()) ==
+                        sorted(rsids_weights_dup))
+                assert (sorted(gen_filt.metadata.index) ==
+                        sorted(rsids_weights_dup))
+
+        # test 2. Less rsids
+
+        gen = copy.deepcopy(gen_ref)
+        keep_rsids = ['RSID_2', 'RSID_3']
+        for file in weights_files:
+            w = path_to_weights + file
+            if in_place:
+                gen.filter(rsids=keep_rsids, weights=w, inplace=in_place)
+                gen_filt = gen
+            else:
+                gen_filt = gen.filter(rsids=keep_rsids, weights=w,
+                                      inplace=in_place)
+            if file != 'weights_5_duplicatedRSID.csv':
+                assert (sorted(gen_filt.probabilities.keys()) ==
+                        sorted(keep_rsids))
+                assert (sorted(gen_filt.metadata.index) ==
+                        sorted(keep_rsids))
+            else:
+                assert (sorted(gen_filt.probabilities.keys()) ==
+                        sorted(['RSID_2']))
+                assert (sorted(gen_filt.metadata.index) ==
+                        sorted(['RSID_2']))
+
+        with pytest.raises(ValueError):
+            gen.filter(rsids='RSID_2000', weights=w, inplace=in_place)
 
 
 @pytest.mark.parametrize("in_place",
@@ -441,102 +526,6 @@ def test__get_array_of_probabilites_and_samples():
     assert samples.shape[0] == 500
 
 
-@pytest.mark.parametrize("in_place",
-                         [(True),
-                          (False)])
-def test_filter_by_weigths(in_place):
-    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
-    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv', 
-                     'weights_noMatchRSID.csv']
-    n_rsid = [5, 100, 199, 0]
-    weights = []
-    for wfile in weights_files:
-        path_to_file = path_to_weights + wfile
-        file = hps.read_weights(path_to_file)
-        weights.append(file)
-
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    with tempfile.TemporaryDirectory() as tmpdir:
-        dataset = dl.clone(source=source, path=tmpdir + '/')
-        dataset.get()
-        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
-        gen_ref = hps.Genotype.from_bgen(files=bgenfile)
-
-    for i, w in enumerate(weights):
-        gen = copy.deepcopy(gen_ref)
-        if n_rsid[i] == 0:
-            with pytest.raises(ValueError):
-                gen.filter_by_weigths(w)
-
-        else:
-            if in_place:
-                gen.filter_by_weigths(w, inplace=in_place)
-                assert len(gen.rsids) == n_rsid[i]
-                assert validatePANDAScolumns(w,
-                                             ['ea', 'weight', 'rsid', 'chr'])
-            else:
-                gen_filt = gen.filter_by_weigths(w, inplace=in_place)
-                assert len(gen_filt.rsids) == n_rsid[i]
-
-
-def test_snp2genotype():
-    "Compare outputs of snp2genotyp in Genotype object ans as initial function"
-
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    with tempfile.TemporaryDirectory() as tmpdir:
-        dataset = dl.clone(source=source, path=tmpdir + '/')
-        dataset.get()
-        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
-        gen = hps.Genotype.from_bgen(files=bgenfile)
-        gen2 = copy.deepcopy(gen)
-
-        snpdata, probsdata = hps_o.read_bgen(files=bgenfile,
-                                             rsids_as_index=True,
-                                             no_neg_samples=False,
-                                             join='inner',
-                                             verify_integrity=False,
-                                             probs_in_pd=False,
-                                             verbose=True)
- 
-    g_allele_old, g_012_old, prob_old =\
-        hps_o.snp2genotype(snpdata=snpdata,
-                           th=0.9,
-                           snps=None,
-                           samples=None,
-                           genotype_format='allele',
-                           probs=probsdata,
-                           weights=None,
-                           verbose=True,
-                           profiler=None)
-
-    gen.consolidate()
-    g_allele, g_012 = gen.snp2genotype()
-
-    # assert np.array_equal(g_012_old.to_numpy().T, g_012)
-    # assert np.array_equal(g_allele_old.to_numpy().T, g_allele)
-    assert_frame_equal(g_012_old.transpose(), g_012, check_dtype=False)
-    assert_frame_equal(g_allele_old.transpose(), g_allele)
-    # SOME esceptions about the format need to be added
-
-    # with snp2gnotype split into two methos
-
-    g_allele_2, g_012_2 = gen2.rsid_to_genotype()
-    assert_frame_equal(g_012_2, g_012)
-    assert_frame_equal(g_allele_2, g_allele)
-
-
-def test_read_weights():
-    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
-    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv'] 
- 
-    for wf in weights_files:
-        path_w = path_to_weights + wf
-        weights = hps.read_weights(path_w)
-        weights_old = hps_o.read_weights(path_w)
-
-        assert np.all(weights.to_numpy() == weights_old.to_numpy()[:, 1:])
-
-
 def test_read_weight_wrong_weiths_files():
     path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
     
@@ -551,173 +540,10 @@ def test_read_weight_wrong_weiths_files():
         hps.read_weights(path_to_weights + wfile)
 
 
-def test_snp2genotype_weigths():
-    """Compare outputs of snp2genotyp in Genotype object ans as initial function
-    when weights are given"""
-
-    # path_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/weights_all.csv'
-    
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    with tempfile.TemporaryDirectory() as tmpdir:
-        dataset = dl.clone(source=source, path=tmpdir + '/')
-        dataset.get()
-        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
-        gen = hps.Genotype.from_bgen(files=bgenfile)
-
-        snpdata, probsdata = hps_o.read_bgen(files=bgenfile,
-                                             rsids_as_index=True,
-                                             no_neg_samples=False,
-                                             join='inner',
-                                             verify_integrity=False,
-                                             probs_in_pd=False,
-                                             verbose=True)
- 
-    # gen.consolidate()
-    # weights = hps.read_weights_Genotype(path_weights)
-    # weights_old = hps.read_weights(path_to_weights)
-    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
-    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv']
-    n_weighted_rsids = [5, 100, 199]
-
-    for i, wf in enumerate(weights_files):
-        path_w = path_to_weights + wf
-        g_allele_old, g_012_old, risk_old =\
-            hps_o.snp2genotype(snpdata=snpdata,
-                               th=0.9,
-                               snps=None,
-                               samples=None,
-                               genotype_format='allele',
-                               probs=probsdata,
-                               weights=path_w,
-                               verbose=True,
-                               profiler=None)
-        gen_copy = copy.deepcopy(gen)
-        g_allele, g_012, risk = gen_copy.snp2genotype(weights=path_w)
-
-        # assert np.array_equal(g_012_old.to_numpy().T, g_012)
-        # assert np.array_equal(g_allele_old.to_numpy().T, g_allele)
-        
-        # assert np.allclose(np.squeeze(risk_old.to_numpy()), risk,
-        #                    equal_nan=True)
-        assert_frame_equal(risk_old, risk)
-
-        # test with snp2gnotype split into two methdos
-        gen2_copy = copy.deepcopy(gen)
-        dosage2, risk2 = gen2_copy.rsid_to_riskscore(weights=path_w)
-        assert_frame_equal(risk2, risk)
-        assert isinstance(dosage2, pd.core.frame.DataFrame)
-        assert dosage2.shape[1] == 500
-        assert dosage2.shape[0] == n_weighted_rsids[i]
-
-
-def test_rsid_to_bgen():
-    """ original and new function give the same outputs"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    rsids = ['RSID_101']
-    chromosomes = ['1']
-    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
-
-    with tempfile.TemporaryDirectory() as tempdir:
-
-        ch_rs_old, files_old, dataL_old =\
-            hps_o.rsid2snp(rsids,
-                           outdir=tempdir,
-                           datalad_source=source,
-                           qctool=qctool,
-                           datalad_drop=True,
-                           datalad_drop_if_got=True,
-                           data_dir=tempdir,
-                           force=False,
-                           chromosomes=chromosomes,
-                           chromosomes_use=None,
-                           outformat='bgen')
-    
-    with tempfile.TemporaryDirectory() as tempdir:
-
-        ch_rs, files, dataL = hps.rsid_to_bgen(rsids,
-                                               outdir=tempdir,
-                                               datalad_source=source,
-                                               qctool=qctool,
-                                               datalad_drop=True,
-                                               datalad_drop_if_got=True,
-                                               data_dir=tempdir,
-                                               recompute=False,
-                                               chromosomes=chromosomes,
-                                               chromosomes_use=None)
-
-    assert ch_rs_old.equals(ch_rs)
-
-
 def test_rsid_to_bgen_no_qstool():
     qctool = None
     with pytest.raises(ValueError):
         hps.rsid_to_bgen(rsids='rs101', outdir='', qctool=qctool)
-
-
-def test_rsid_to_bgen_noDrop():
-    """ original and new function give the same outputs when datalad datasets
-    are not dropped"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
-    rsids = ['RSID_101']
-    chromosomes = ['1']
-    qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
-
-    with tempfile.TemporaryDirectory() as tempdir:
-
-        ch_rs_old, files_old, dataL_old =\
-            hps_o.rsid2snp(rsids,
-                           outdir=tempdir,
-                           datalad_source=source,
-                           qctool=qctool,
-                           datalad_drop=False,
-                           datalad_drop_if_got=True,
-                           data_dir=tempdir,
-                           force=False,
-                           chromosomes=chromosomes,
-                           chromosomes_use=None,
-                           outformat='bgen')
-    
-    with tempfile.TemporaryDirectory() as tempdir:
-
-        ch_rs, files, dataL = hps.rsid_to_bgen(rsids,
-                                               outdir=tempdir,
-                                               datalad_source=source,
-                                               qctool=qctool,
-                                               datalad_drop=False,
-                                               datalad_drop_if_got=True,
-                                               data_dir=tempdir,
-                                               recompute=False,
-                                               chromosomes=chromosomes,
-                                               chromosomes_use=None)
-        # path to save files is not empty
-        with pytest.raises(ValueError):
-            hps.rsid_to_bgen(rsids, outdir=tempdir, datalad_source=source,
-                             qctool=qctool, datalad_drop=False,
-                             datalad_drop_if_got=True, data_dir=tempdir, 
-                             recompute=True,  # now we recompute
-                             chromosomes=chromosomes, chromosomes_use=None)
-
-    assert ch_rs_old.equals(ch_rs)
-
-    # chromosomes to be used do not match rsids
-    ch_use = ['123456', '7654321']
-    ch_rs, files, dataL = hps.rsid_to_bgen(rsids, outdir=tempdir, 
-                                           datalad_source=source,
-                                           qctool=qctool, datalad_drop=False,
-                                           datalad_drop_if_got=True,
-                                           data_dir=tempdir, recompute=False,
-                                           chromosomes=chromosomes,
-                                           chromosomes_use=ch_use) 
-                                           # chromosomes to be used
-
-    assert files is None
-    assert dataL is None
-    assert ch_rs_old.equals(ch_rs)
-
-
-def validatePANDAScolumns(outPANDAS, refColFields):
-    outFields = [field for field in outPANDAS.columns]
-    return refColFields.sort() == outFields.sort()
 
 
 def test_rsid_to_bgen_as_before_Genotype():
@@ -750,22 +576,6 @@ def test_rsid_to_bgen_as_before_Genotype():
         assert type(dataL) == dl.Dataset
 
 
-def test_get_chromosome():
-    """compare old and new function's outputs
-    """
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
-    cs = '1'
-    with tempfile.TemporaryDirectory() as tempdir:
-        files, ds, getout = hps.get_chromosome(c=cs,
-                                               datalad_source=source,
-                                               data_dir=tempdir)
-        files_o, ds_o, getout_o = hps_o.get_chromosome(c=cs,
-                                                       datalad_source=source,
-                                                       data_dir=tempdir)
-        assert files == files_o
-        assert ds == ds_o
-
-
 def _filesHaveName(dataLget):
     """files obtined with DataLad are the exnple files"""
     filenames = [Path(ind['path']).name
@@ -787,17 +597,21 @@ def test_get_chromosome_outputTypes_pass():
         assert type(ds) == dl.Dataset
         assert _filesHaveName(getout)
 
+        # chromosome given as int intead of str
+        c = 1
+        files_i, ds_i, getout_i = hps.get_chromosome(c=c,
+                                                     datalad_source=source,
+                                                     data_dir=tempdir)
+        assert files_i == files
+        assert getout_i[0]['message'] == 'already present'
+
         # no datalad source, files are stored locally
+        c = '1'
         files_NO_dl, ds_NO_dl, getout_NO_dl = hps.get_chromosome(
             c=c, datalad_source=None, data_dir=tempdir)
         assert sorted([Path(f) for f in filesRef]) == sorted(files_NO_dl)
         assert ds_NO_dl is None
         assert all([f == 'datalad not used' for f in getout_NO_dl])
-
-        # chromosome given as int intead of str
-        c = 1
-        with pytest.raises(TypeError):
-            hps.get_chromosome(c=c, datalad_source=source, data_dir=tempdir)
 
         # chormosome 'c' does not match chromosome on datalad sourc
         c = '23'
@@ -854,4 +668,50 @@ def test_ensembl_human_rsid_read_RSIDs_csv_and_PGS():
     assert out_pgs.shape[0] == 77
 
 
+def test_rsid_to_genotype_riskscore_mock_Genotype():
 
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen = hps.Genotype.from_bgen(files=bgenfile)
+
+    mock_meta = gen.metadata.loc[['RSID_2', 'RSID_3']]
+    mock_samples = gen.probabilities['RSID_2'][0][:2]
+    mock_prob = {'RSID_2': (mock_samples, np.array([[0.25, 0.25, 0.5],
+                                                    [0.5, 0.25, 0.25]])),
+                 'RSID_3': (mock_samples, np.array([[1.0, 0.0, 0.0],
+                                                    [0.0, 1.0, 0.0]]))}
+
+    mockGen = hps.Genotype(mock_meta, mock_prob)
+
+    mock_g_012 = pd.DataFrame(data=np.array([[2, 0], [0, 1]]),
+                              index=['RSID_2', 'RSID_3'],
+                              columns=mock_samples)
+
+    mock_g_ale = pd.DataFrame(data=np.array([['GG', 'AA'], ['AA', 'AG']]),
+                              index=['RSID_2', 'RSID_3'],
+                              columns=mock_samples)
+
+    mock_dosage = pd.DataFrame(data=np.array([
+                                             [0.75, 1.25],
+                                             [2.0, 1.0]
+                                             ]),
+                               index=['RSID_2', 'RSID_3'],
+                               columns=mock_samples)
+
+    mock_risk = pd.DataFrame(data=np.array([4.75, 3.25]),
+                             index=mock_samples)
+
+    mock_w = '/home/oportoles/Documents/MyCode/hipsnp/test_data/weights_5.csv'
+
+    # end of moking preparatives
+
+    g_ale, g_012 = mockGen.rsid_to_genotype()
+    dosage, risk = mockGen.rsid_to_riskscore(weights=mock_w)
+    assert_frame_equal(g_012, mock_g_012)
+    assert_frame_equal(g_ale, mock_g_ale)
+    assert_frame_equal(dosage, mock_dosage)
+    assert_frame_equal(risk, mock_risk)

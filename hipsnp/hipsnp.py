@@ -563,7 +563,7 @@ class Genotype():
             raise_error(f'No RSIDs matching filter specifications')
 
         probs_filtered = {k_rsid: self.probabilities[k_rsid]
-                          for k_rsid in rsids}
+                          for k_rsid in rsids if k_rsid in self.rsids}
 
         if inplace:
             self._probabilities = probs_filtered
@@ -704,7 +704,9 @@ class Genotype():
 
         Returns
         -------
+        genotype_allele: pandas DataFrame
         
+        genotype_012 : pandas DataFrame
         """
         # TODO: Documnet retrun       
         # TODO:  uinit test it
@@ -791,8 +793,8 @@ class Genotype():
 
         # sort all DataFrames by the RSIDS in gen_filt.probabilities
         rsids_as_in_prob = list(gen_filt.probabilities.keys())
-        gen_filt._metadata.reindex(rsids_as_in_prob)
-        weights.reindex(rsids_as_in_prob)
+        gen_filt._metadata = gen_filt._metadata.reindex(rsids_as_in_prob)
+        weights = weights.reindex(rsids_as_in_prob)
         
         n_rsid = len(gen_filt.rsids)
         n_sample = len(gen_filt.unique_samples())
@@ -894,7 +896,7 @@ class Genotype():
         genotype_012 = pd.DataFrame(data=genotype_012,
                                     index=self.rsids,
                                     columns=samples)
-        # TODO: DONE make two functions, one returns genotype_* and the oother one 
+        # TODO: DONE make two functions, one returns genotype_* and the oother 
         # returns the dosage and riskscore
         if weights is not None:
             ea = w['ea'].to_numpy()
