@@ -566,13 +566,13 @@ def test_read_weight_wrong_weiths_files():
         hps.read_weights(path_to_weights + wfile)
 
 
-def test_rsid_to_bgen_no_qstool():
+def test_pruned_bgen_from_Datalad_no_qstool():
     qctool = None
     with pytest.raises(ValueError):
-        hps.rsid_to_bgen(rsids='rs101', outdir='', qctool=qctool)
+        hps.pruned_bgen_from_Datalad(rsids='rs101', outdir='', qctool=qctool)
 
 
-def test_rsid_to_bgen_as_before_Genotype():
+def test_pruned_bgen_from_Datalad_as_before_Genotype():
     """ finds and uses qctool"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     rsids = ['RSID_101']
@@ -581,16 +581,17 @@ def test_rsid_to_bgen_as_before_Genotype():
     # ASK: how do I set this path for testing?
     with tempfile.TemporaryDirectory() as tempdir:
 
-        ch_rs, files, dataL = hps.rsid_to_bgen(rsids,
-                                               outdir=tempdir,
-                                               datalad_source=source,
-                                               qctool=qctool,
-                                               datalad_drop=True,
-                                               datalad_drop_if_got=True,
-                                               data_dir=tempdir,
-                                               recompute=False,
-                                               chromosomes=chromosomes,
-                                               chromosomes_use=None)
+        ch_rs, files, dataL = hps.pruned_bgen_from_Datalad(
+            rsids,
+            outdir=tempdir,
+            datalad_source=source,
+            qctool=qctool,
+            datalad_drop=True,
+            datalad_drop_if_got=True,
+            data_dir=tempdir,
+            recompute=False,
+            chromosomes=chromosomes,
+            chromosomes_use=None)
         filesRef = [tempdir + '/imputation/' + 'example_c' +
                     str(chromosomes[0]) + '_v0.bgen',
                     tempdir + '/imputation/' + 'example_c' +
@@ -610,14 +611,14 @@ def _filesHaveName(dataLget):
     return sameFiles
 
 
-def test_get_chromosome_outputTypes_pass():
+def test_get_chromosome_data_outputTypes_pass():
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
     c = '1'
     with tempfile.TemporaryDirectory() as tempdir:
         filesRef = [
             tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.bgen',
             tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.sample']
-        files, ds, getout = hps.get_chromosome(c=c, datalad_source=source,
+        files, ds, getout = hps.get_chromosome_data(c=c, datalad_source=source,
                                                data_dir=tempdir)
         assert sorted([Path(f) for f in filesRef]) == sorted(files)
         assert type(ds) == dl.Dataset
@@ -625,7 +626,7 @@ def test_get_chromosome_outputTypes_pass():
 
         # chromosome given as int intead of str
         c = 1
-        files_i, ds_i, getout_i = hps.get_chromosome(c=c,
+        files_i, ds_i, getout_i = hps.get_chromosome_data(c=c,
                                                      datalad_source=source,
                                                      data_dir=tempdir)
         assert files_i == files
@@ -633,7 +634,7 @@ def test_get_chromosome_outputTypes_pass():
 
         # no datalad source, files are stored locally
         c = '1'
-        files_NO_dl, ds_NO_dl, getout_NO_dl = hps.get_chromosome(
+        files_NO_dl, ds_NO_dl, getout_NO_dl = hps.get_chromosome_data(
             c=c, datalad_source=None, data_dir=tempdir)
         assert sorted([Path(f) for f in filesRef]) == sorted(files_NO_dl)
         assert ds_NO_dl is None
@@ -642,59 +643,59 @@ def test_get_chromosome_outputTypes_pass():
         # chormosome 'c' does not match chromosome on datalad sourc
         c = '23'
         with pytest.raises(ValueError):
-            hps.get_chromosome(c=c, datalad_source=source, data_dir=tempdir)
+            hps.get_chromosome_data(c=c, datalad_source=source, data_dir=tempdir)
 
     # woring path to chormosome files
     with tempfile.TemporaryDirectory() as tempdir:
         c = '1'
         with pytest.raises(ValueError):
-            hps.get_chromosome(c=c, datalad_source=None, data_dir=tempdir)
+            hps.get_chromosome_data(c=c, datalad_source=None, data_dir=tempdir)
 
 
-def test_ensembl_human_rsid_has_alleles():
+def test_request_ensembl_rsid_has_alleles():
     """test output is in JSON format"""
     rsidsPass = ['rs699', 'rs102']
     for rsid in rsidsPass:
-        outRST = hps.ensembl_human_rsid(rsid)
+        outRST = hps.request_ensembl_rsid(rsid)
         assert 'A/G' in outRST['mappings'][0]['allele_string']
 
 
-def test_ensembl_human_rsid_has_alleles_captures_failsCapital():
+def test_request_ensembl_rsid_has_alleles_captures_failsCapital():
     """Exception raised internally"""
     rsidsFail = ['RS699', 'ID699', '699']
     for rsid in rsidsFail:
         with pytest.raises(ValueError):
-            hps.ensembl_human_rsid(rsid)
+            hps.request_ensembl_rsid(rsid)
 
 
-def test_ensembl_human_rsid_has_alleles_captures_give_integer():
+def test_request_ensembl_rsid_has_alleles_captures_give_integer():
     """rsids with wrong format"""
     rsidsFail = [123, 699, 'RS102']
     for rsid in rsidsFail:
         with pytest.raises(ValueError):
-            hps.ensembl_human_rsid(rsid)
+            hps.request_ensembl_rsid(rsid)
 
 
-def test_ensembl_human_rsid_read_RSIDs_csv_and_PGS():
+def test_request_ensembl_rsid_read_RSIDs_csv_and_PGS():
     """rsids given with a csv file"""
     pathfiles = str(Path().cwd().joinpath("hipsnp", "tests", "test_data"))
     rsidFile =  pathfiles + '/rsid_699_102.csv'
     rsid = ['rs699', 'rs102']
     # ASK: data test files are stored locally, is there a better way to do it? 
     # put the files on hipsnp/test/data folder and use relative paths
-    out_str = hps.rsid2chromosome(rsid)
-    out_f = hps.rsid2chromosome(rsidFile)
+    out_str = hps.rsid_chromosome_DataFrame(rsid)
+    out_f = hps.rsid_chromosome_DataFrame(rsidFile)
         
     assert_frame_equal(out_str, out_f)
 
     pgsfile = pathfiles + '/weights_PGS000001.txt'
-    out_pgs = hps.rsid2chromosome(pgsfile)
+    out_pgs = hps.rsid_chromosome_DataFrame(pgsfile)
     
     assert isinstance(out_pgs, pd.core.frame.DataFrame)
     assert out_pgs.shape[0] == 77
 
 
-def test_rsid_to_genotype_riskscore_mock_Genotype():
+def test_alleles_riskscore_mock_Genotype():
 
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # exmaple data
 
@@ -739,8 +740,8 @@ def test_rsid_to_genotype_riskscore_mock_Genotype():
 
     # end of moking preparatives
 
-    g_ale, g_012 = mockGen.rsid_to_genotype()
-    dosage, risk = mockGen.rsid_to_riskscore(weights=mock_w)
+    g_ale, g_012 = mockGen.alleles()
+    dosage, risk = mockGen.riskscore(weights=mock_w)
     assert_frame_equal(g_012, mock_g_012)
     assert_frame_equal(g_ale, mock_g_ale)
     assert_frame_equal(dosage, mock_dosage)
@@ -749,8 +750,8 @@ def test_rsid_to_genotype_riskscore_mock_Genotype():
     # test 2: filter by rsid
     mock_risk_filt_rs = np.array([[0.75], [1.25]])
 
-    g_ale, g_012 = mockGen.rsid_to_genotype(rsids='RSID_2')
-    dosage, risk = mockGen.rsid_to_riskscore(rsids='RSID_2', weights=mock_w)
+    g_ale, g_012 = mockGen.alleles(rsids='RSID_2')
+    dosage, risk = mockGen.riskscore(rsids='RSID_2', weights=mock_w)
     assert np.array_equal(g_012.loc['RSID_2'].values,
                           mock_g_012.loc['RSID_2'].values)
     assert np.array_equal(g_ale.loc['RSID_2'].values,

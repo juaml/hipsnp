@@ -14,10 +14,11 @@ from functools import reduce
 
 # TODO: if condition is empty list, make explicit len(list) == 0
 
-
-def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
-                   imputation_dir='imputation', data_dir='/tmp/genetic'):
-    """Get a particular chromosome's (imputed) data
+# ASK: private method?
+def get_chromosome_data(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
+                        imputation_dir='imputation', data_dir='/tmp/genetic'):
+    """Get a particular chromosome's (imputed) data from a datalad dataset or
+    a directoy 
 
     Parameters
     ----------
@@ -30,19 +31,20 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
         'ria+http://ukb.ds.inm7.de#~genetic'
     imputationdir : str, optional
          directory in which the imputation files are stored,
-         by default 'imputation'
+         by default 'imputation'.
     data_dir : str, optional
-        directory to use for the datalad dataset, or data files,
-        by default '/tmp/genetic'. chromosome data will or should be placed on
-        '<data_dir>/<imputationdir>'
+        directory to use for the datalad dataset, or directory to actual
+        data files, by default '/tmp/genetic'. Chromosome data will or should
+        be placed on '<data_dir>/<imputationdir>'
 
     Returns
     -------
-    list of str
-        file names
-    datalad dataset object
-    list of datalad get output
-
+    files: list of str
+        path to file names
+    ds: datalad Dataset or None
+        datalad dataset object with chromome data, None if data is in a 
+        directory
+    getout : list of datalad get outputs or "datalad not used"
 
     """
     data_dir = Path(data_dir)
@@ -61,8 +63,8 @@ def get_chromosome(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
         
     return files, ds, getout
 
-
-def ensembl_human_rsid(rsid):
+# ASK: private method?
+def request_ensembl_rsid(rsid):
     """Make a REST call to ensemble.org and return a JSON object with
     the information of the variant of given a rsid
 
@@ -95,9 +97,10 @@ def ensembl_human_rsid(rsid):
     return response.json()
 
 
-def rsid2chromosome(rsids, chromosomes=None):
-    """Get DataFrame with rsids and chormosomes. If chormoseomes are not given
-    they will retrieved from ensemble.org for each rsids.
+# ASK: private method?
+def rsid_chromosome_DataFrame(rsids, chromosomes=None):
+    """Build pandas DataFrame with rsids and chormosomes. If chormoseomes are
+    not given they will be retrieved from ensembl.org for each rsids.
 
     Parameters
     ----------
@@ -130,7 +133,7 @@ def rsid2chromosome(rsids, chromosomes=None):
         # get from ensembl
         chromosomes = [None] * len(rsids)
         for rs in range(len(rsids)):
-            ens = ensembl_human_rsid(rsids[rs])
+            ens = request_ensembl_rsid(rsids[rs])
             ens = ens['mappings']
             for m in range(len(ens)):
                 if ens[m]['ancestral_allele'] is not None:
@@ -150,19 +153,27 @@ def rsid2chromosome(rsids, chromosomes=None):
     return df
 
 
-# def rsid_to_bgen() # TODO: DONE rename rsid2snp -> sid_to_bgen
+# def rsid_to_bgen() # TODO: DONE rename rsid2snp -> rsid_to_bgen
 # TODO: rename outdir to output_dir; data_dir to datalad_output
-def rsid_to_bgen(rsids, outdir,
-                 datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
-                 qctool=None, datalad_drop=True, datalad_drop_if_got=True,
-                 data_dir=None, recompute=False, chromosomes=None,
-                 chromosomes_use=None):
+def pruned_bgen_from_Datalad(
+    rsids, outdir,
+    datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
+    qctool=None, datalad_drop=True, datalad_drop_if_got=True,
+    data_dir=None, recompute=False, chromosomes=None,
+    chromosomes_use=None):
     # ASK: chromosomes_use does not affect to the returned pandas
     # DataFrame. Is this the wanted behavior? should it filter the 
     # DataFrame by wanted chromosomes?
+    # ASK: is not redundant to ask for rsids and chromosomes? If a RSID has one
+    # and only one chromosome. Why should the used provide a chromosome to use?
     # TODO: DONE change it to filter all outputs
     # TODO: DONE change force name by recompute and set default to False
-    """convert rsids to snps in BGEN format with qctool v2
+
+    # ASK: why chromosome and chromosome_use? at the end it only keeps
+    # chromosomes in chromosome_use. According to the use case of presentation
+    # a set of chromosomes does not need to be subsampled
+    """ Creates or gets a .bgen format file with <rsids> and <chormosomes_use> 
+    frome a datalad Dataset. .bgen file is created with qctool v2 (See notes)
 
     Parameters
     ----------
@@ -215,7 +226,7 @@ def rsid_to_bgen(rsids, outdir,
     if chromosomes and len(chromosomes) != len(rsids):
         raise_error('Mismatch between the number of chrmosomes and rsids')
 
-    ch_rs = rsid2chromosome(rsids, chromosomes=chromosomes)
+    ch_rs = rsid_chromosome_DataFrame(rsids, chromosomes=chromosomes)
     if chromosomes_use is not None:
         ch_rs = ch_rs[ch_rs.chromosomes.isin(chromosomes_use)]
 
@@ -247,9 +258,10 @@ def rsid_to_bgen(rsids, outdir,
             logger.info(f'rsids: {rs_ch}\n')
 
         # get the data
-        files, ds, getout = get_chromosome(ch,
-                                           datalad_source=datalad_source,
-                                           data_dir=data_dir)
+        files, ds, getout = \
+            get_chromosome_data(ch,
+                                datalad_source=datalad_source,
+                                data_dir=data_dir)
         for f_ix, getout_val in enumerate(getout):
             status = getout_val['status']
             if status != 'ok' and status != 'notneeded':
@@ -279,6 +291,8 @@ def rsid_to_bgen(rsids, outdir,
         cmd = (qctool + ' -g ' + str(file_bgen) + ' -s ' + str(file_sample)
                + ' -incl-rsids ' + str(file_rsids)  + ' -og ' + str(file_out)
                + ' -ofiletype bgen_v1.2 -bgen-bits 8')
+               # from a .bgen and a .samples file, make a .bgen file with rsids
+               # in -incl-rsids in directory file_out 
 
         logger.info('running qctool: {cmd}\n')
         os.system(cmd)
@@ -300,12 +314,14 @@ def rsid_to_bgen(rsids, outdir,
 
 
 def read_weights(weights):
-    """read weights from a .csv file
+    """read weights from a .csv or .pgs file. Minimaly, csv headers 
+        should contain "effect_allele" or "ea", "effect_weight" or ""weight", 
+        "snpid" or "rsid", and "chr_name" or "chr"
 
     Parameters
     ----------
     weiths : str
-        Path to the csv file with the weigths.
+        Path to the csv or pgs file with the weigths. 
 
     Returns
     -------
@@ -688,7 +704,7 @@ class Genotype():
     #         out = self._filter_by_rsids(rsids=rsids, inplace=inplace)
     #         return out
 
-    def rsid_to_genotype(self, rsids=None, samples=None):
+    def alleles(self, rsids=None, samples=None):
         """Get alleles for a Genotype and if weiths are given it computes the 
         risck scores.
 
@@ -698,8 +714,6 @@ class Genotype():
             rsids to be used, by default None
         samples : list of str, optional
             Samples to be used, by default None
-        weights : str, optional
-            Path to CSV file with weights, by default None
 
         Returns
         -------
@@ -739,6 +753,7 @@ class Genotype():
         genotype_allele[i_max_p == 0] = ref[i_max_p == 0] + ref[i_max_p == 0]
         
         # Sort needs a single array, but to add characters it needs two arrays 
+        # ASK: is sorting needed? in talk said that it is not important
         tmp = np.split(np.sort(np.vstack((ref[i_max_p == 1],
                                           alt[i_max_p == 1])).astype(str),
                                axis=1),
@@ -758,7 +773,7 @@ class Genotype():
 
         return genotype_allele, genotype_012
 
-    def rsid_to_riskscore(self, weights, rsids=None, samples=None):
+    def riskscore(self, weights, rsids=None, samples=None):
         """ Obtain risk score and dosage from Genotype object
 
         Parameters
