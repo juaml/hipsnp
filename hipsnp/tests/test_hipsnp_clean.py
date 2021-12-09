@@ -16,6 +16,7 @@ from pandas._testing import assert_frame_equal
 # This test does not compare the ouputs of the previous verions to the latest.
 # This test is intended to be a stand alone test for final package
 
+# TODO: put test files into test/data folder and use relative paths
 
 def validatePANDAScolumns(outPANDAS, refColFields):
     outFields = [field for field in outPANDAS.columns]
@@ -42,7 +43,6 @@ def test_from_bgen_files_duplicate_RSID():
     Duplicated RSIDs should be ignored"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(tmpdir + '/')
         dataset = dl.clone(source=source, path=tmpdir + '/')
         dataset.get()
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
@@ -59,6 +59,11 @@ def test_from_bgen_files_duplicate_RSID():
                     in zip(gen_ref.probabilities.values(),
                            gen_dup.probabilities.values())
                     ])
+
+
+def test_from_bgen_non_existing_file():
+    with pytest.raises(FileNotFoundError):
+        hps.Genotype.from_bgen(files='/nonexisting/this.bgen')
 
 
 @pytest.mark.parametrize("metaCol",
@@ -241,14 +246,35 @@ def test_filter_options_no_weights(in_place):
         with pytest.raises(ValueError):
             gen_ref.filter(rsids=None, samples=not_a_sample, inplace=in_place)
 
+        
+@pytest.mark.parametrize("in_place",
+                         [(True),
+                          (False)])
+def test_filter_no_options(in_place):
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+
+        gen_ref = hps.Genotype.from_bgen(files=bgenfile)       
+    # No arguments to filter
+    with pytest.warns(RuntimeWarning):
+        out = gen_ref.filter(inplace=in_place)
+    if in_place:
+        assert out is None
+    else:
+        assert out == gen_ref
+
 
 @pytest.mark.parametrize("in_place",
                          [(True),
                           (False)])
 def test_filter_only_weigths(in_place):
-    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
-    weights_files = ['weights_5.csv', 'weights_100.csv', 'weights_all.csv', 
-                     'weights_noMatchRSID.csv', ]
+    path_to_weights = \
+        str(Path().cwd().joinpath("hipsnp", "tests", "test_data"))
+    weights_files = ['/weights_5.csv', '/weights_100.csv', '/weights_all.csv', 
+                     '/weights_noMatchRSID.csv', ]
     n_rsid = [5, 100, 199, 0]
     weights = []
     for wfile in weights_files:
@@ -284,10 +310,10 @@ def test_filter_only_weigths(in_place):
                          [(True),
                           (False)])
 def test_filter_rsids_weights(in_place):
-
-    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
-    weights_files = ['weights_5.csv', 'weights_5_unsortedRSID.csv',
-                     'weights_5_duplicatedRSID.csv']
+    path_to_weights = \
+        str(Path().cwd().joinpath("hipsnp", "tests", "test_data"))
+    weights_files = ['/weights_5.csv', '/weights_5_unsortedRSID.csv',
+                     '/weights_5_duplicatedRSID.csv']
     
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -310,7 +336,7 @@ def test_filter_rsids_weights(in_place):
             else:
                 gen_filt = gen.filter(rsids=keep_rsids, weights=w,
                                       inplace=in_place)
-            if file != 'weights_5_duplicatedRSID.csv':
+            if file != '/weights_5_duplicatedRSID.csv':
                 assert (sorted(gen_filt.probabilities.keys()) ==
                         sorted(rsids_weights_5))
                 assert (sorted(gen_filt.metadata.index) ==
@@ -333,7 +359,7 @@ def test_filter_rsids_weights(in_place):
             else:
                 gen_filt = gen.filter(rsids=keep_rsids, weights=w,
                                       inplace=in_place)
-            if file != 'weights_5_duplicatedRSID.csv':
+            if file != '/weights_5_duplicatedRSID.csv':
                 assert (sorted(gen_filt.probabilities.keys()) ==
                         sorted(keep_rsids))
                 assert (sorted(gen_filt.metadata.index) ==
@@ -527,15 +553,15 @@ def test__get_array_of_probabilites_and_samples():
 
 
 def test_read_weight_wrong_weiths_files():
-    path_to_weights = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
-    
-    wfile = 'weights_5_duplicatedRSID.csv'
+    path_to_weights = \
+        str(Path().cwd().joinpath("hipsnp", "tests", "test_data"))
+    wfile = '/weights_5_duplicatedRSID.csv'
     w = hps.read_weights(path_to_weights + wfile)
     assert w.shape[0] == 4 and w.shape[1] == 3
     assert sorted(list(w.index)) == sorted(['RSID_2', 'RSID_5', 'RSID_6',
                                             'RSID_7'])
 
-    wfile = 'weights_5_other_headers.csv'
+    wfile = '/weights_5_other_headers.csv'
     with pytest.raises(ValueError):
         hps.read_weights(path_to_weights + wfile)
 
@@ -552,7 +578,7 @@ def test_rsid_to_bgen_as_before_Genotype():
     rsids = ['RSID_101']
     chromosomes = ['1']
     qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
-
+    # ASK: how do I set this path for testing?
     with tempfile.TemporaryDirectory() as tempdir:
 
         ch_rs, files, dataL = hps.rsid_to_bgen(rsids,
@@ -651,8 +677,8 @@ def test_ensembl_human_rsid_has_alleles_captures_give_integer():
 
 def test_ensembl_human_rsid_read_RSIDs_csv_and_PGS():
     """rsids given with a csv file"""
-    pathfiles = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
-    rsidFile =  pathfiles + 'rsid_699_102.csv'
+    pathfiles = str(Path().cwd().joinpath("hipsnp", "tests", "test_data"))
+    rsidFile =  pathfiles + '/rsid_699_102.csv'
     rsid = ['rs699', 'rs102']
     # ASK: data test files are stored locally, is there a better way to do it? 
     # put the files on hipsnp/test/data folder and use relative paths
@@ -661,7 +687,7 @@ def test_ensembl_human_rsid_read_RSIDs_csv_and_PGS():
         
     assert_frame_equal(out_str, out_f)
 
-    pgsfile = pathfiles + 'weights_PGS000001.txt'
+    pgsfile = pathfiles + '/weights_PGS000001.txt'
     out_pgs = hps.rsid2chromosome(pgsfile)
     
     assert isinstance(out_pgs, pd.core.frame.DataFrame)
@@ -706,6 +732,10 @@ def test_rsid_to_genotype_riskscore_mock_Genotype():
                              index=mock_samples)
 
     mock_w = '/home/oportoles/Documents/MyCode/hipsnp/test_data/weights_5.csv'
+    mock_w = str(Path().cwd().joinpath("hipsnp",
+                                       "tests",
+                                       "test_data",
+                                       "weights_5.csv"))
 
     # end of moking preparatives
 
@@ -715,3 +745,16 @@ def test_rsid_to_genotype_riskscore_mock_Genotype():
     assert_frame_equal(g_ale, mock_g_ale)
     assert_frame_equal(dosage, mock_dosage)
     assert_frame_equal(risk, mock_risk)
+
+    # test 2: filter by rsid
+    mock_risk_filt_rs = np.array([[0.75], [1.25]])
+
+    g_ale, g_012 = mockGen.rsid_to_genotype(rsids='RSID_2')
+    dosage, risk = mockGen.rsid_to_riskscore(rsids='RSID_2', weights=mock_w)
+    assert np.array_equal(g_012.loc['RSID_2'].values,
+                          mock_g_012.loc['RSID_2'].values)
+    assert np.array_equal(g_ale.loc['RSID_2'].values,
+                          mock_g_ale.loc['RSID_2'].values)
+    assert np.array_equal(dosage.loc['RSID_2'].values,
+                          mock_dosage.loc['RSID_2'].values)
+    assert np.array_equal(mock_risk_filt_rs, risk.values)

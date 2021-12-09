@@ -102,7 +102,8 @@ def rsid2chromosome(rsids, chromosomes=None):
     Parameters
     ----------
     rsids : str or list of str
-        list of rsids
+        rsids, list of rsids, or path to tab separated csv file with rsids or 
+        PGS file
     chromosomes : None, str or list of str, optional
         list of chromosomes, by default None and retrieves the chromosome from
         ensemble.org
@@ -436,7 +437,7 @@ class Genotype():
         a copy of it.
         """
         # TODO: DONE make possible that filter happnes inplace
-        # TODO: unittest filter with weights
+        # TODO: DONE unittest filter with weights
         if rsids is None and samples is None and weights is None:
             warn(f'No paramters to filter were given to filter()')
             if inplace:
@@ -657,37 +658,35 @@ class Genotype():
             consol_prob_matrix[i, :, :] = smpl_prob[1]
         return consol_prob_matrix
 
-    def filter_by_weigths(self, weights, inplace=True):
-        # TODO: to be removed. Only for testing new weights filter
-        # match filter RSIDs with RSIDs in Genotype
-        """ Reduce RSIDs to those present in the weigths file. weights should be
-        read with the function read_weights() to make sure that the weigths 
-        variable has the proper form
+    # def filter_by_weigths(self, weights, inplace=True):
+    #     # match filter RSIDs with RSIDs in Genotype
+    #     """ Reduce RSIDs to those present in the weigths file. weights should be
+    #     read with the function read_weights() to make sure that the weigths 
+    #     variable has the proper form
 
-        Parameters
-        ----------
-        weights : DataFrame
-            Pandas DataFrame with weightis as provided by read_weigts()
-        inplace : bool, optional
-            If True retruns the same object, otherwise returns a new object
-            , by default True
+    #     Parameters
+    #     ----------
+    #     weights : DataFrame
+    #         Pandas DataFrame with weightis as provided by read_weigts()
+    #     inplace : bool, optional
+    #         If True retruns the same object, otherwise returns a new object
+    #         , by default True
 
-        Returns
-        -------
-        Genotype or None:
-            Genotype with RSIDs matching to weights file if inplace = False,
-            None if inplace = True
+    #     Returns
+    #     -------
+    #     Genotype or None:
+    #         Genotype with RSIDs matching to weights file if inplace = False,
+    #         None if inplace = True
 
-        """
+    #     """
 
-        rsids = weights.index.to_list()
-        if inplace:
-            self._filter_by_rsids(rsids=rsids, inplace=inplace)
-            return None
-        else:
-            # TODO: add unit test
-            out = self._filter_by_rsids(rsids=rsids, inplace=inplace)
-            return out
+    #     rsids = weights.index.to_list()
+    #     if inplace:
+    #         self._filter_by_rsids(rsids=rsids, inplace=inplace)
+    #         return None
+    #     else:
+    #         out = self._filter_by_rsids(rsids=rsids, inplace=inplace)
+    #         return out
 
     def rsid_to_genotype(self, rsids=None, samples=None):
         """Get alleles for a Genotype and if weiths are given it computes the 
@@ -709,7 +708,7 @@ class Genotype():
         genotype_012 : pandas DataFrame
         """
         # TODO: Documnet retrun       
-        # TODO:  uinit test it
+        # TODO: DONE uinit test it
 
         if rsids is not None or samples is not None:
             gen_filt = self.filter(samples=samples, rsids=rsids, inplace=False)
@@ -828,100 +827,100 @@ class Genotype():
         riskscore = pd.DataFrame(data=riskscore,
                                  index=gen_filt.unique_samples())
         return dosage, riskscore
-        # TODO: unitest it
+        # TODO: DONE unitest it
 
-    def snp2genotype(self, rsids=None, samples=None, weights=None):
-        """Get alleles for a Genotype and if weiths are given it computes the 
-        risck scores.
+    # def snp2genotype(self, rsids=None, samples=None, weights=None):
+    #     """Get alleles for a Genotype and if weiths are given it computes the 
+    #     risck scores.
 
-        Parameters
-        ----------
-        rsids : list of str, optional
-            rsids to be used, by default None
-        samples : list of str, optional
-            Samples to be used, by default None
-        weights : str, optional
-            Path to CSV file with weights, by default None
+    #     Parameters
+    #     ----------
+    #     rsids : list of str, optional
+    #         rsids to be used, by default None
+    #     samples : list of str, optional
+    #         Samples to be used, by default None
+    #     weights : str, optional
+    #         Path to CSV file with weights, by default None
 
-        Returns
-        -------
+    #     Returns
+    #     -------
         
-        """
-        # TODO: Documnet retrun       
-        # TODO: DONE uinit test it
-        if weights is not None:
-            w = read_weights(weights)
-            self.filter_by_weigths(w, inplace=True)
+    #     """
+    #     # TODO: Documnet retrun       
+    #     # TODO: DONE uinit test it
+    #     if weights is not None:
+    #         w = read_weights(weights)
+    #         self.filter_by_weigths(w, inplace=True)
  
-        self.filter(samples=samples, rsids=rsids, inplace=True)
+    #     self.filter(samples=samples, rsids=rsids, inplace=True)
 
-        if not self.is_consolidated:
-            self.consolidate(inplace=True)
+    #     if not self.is_consolidated:
+    #         self.consolidate(inplace=True)
 
-        probs = self.get_array_of_probabilities()
+    #     probs = self.get_array_of_probabilities()
 
-        # TODO: DONE Filter out bad SNPS
+    #     # TODO: DONE Filter out bad SNPS
 
-        n_rsid = len(self.rsids)
-        samples = self.probabilities[self.rsids[0]][0]
-        n_sample = len(samples)
+    #     n_rsid = len(self.rsids)
+    #     samples = self.probabilities[self.rsids[0]][0]
+    #     n_sample = len(samples)
 
-        logger.info(f'Calculating genotypes for {n_rsid} SNPs and \
-                    {n_sample} samples ... ')
+    #     logger.info(f'Calculating genotypes for {n_rsid} SNPs and \
+    #                 {n_sample} samples ... ')
 
-        genotype_allele = np.empty((n_rsid, n_sample), dtype=object)
-        genotype_012 = np.zeros((n_rsid, n_sample), dtype=int)
+    #     genotype_allele = np.empty((n_rsid, n_sample), dtype=object)
+    #     genotype_012 = np.zeros((n_rsid, n_sample), dtype=int)
 
-        # resahpe to allow for straight indexing
-        ref = np.tile(self.metadata['REF'].to_numpy(), (n_sample, 1)).T
-        alt = np.tile(self.metadata['ALT'].to_numpy(), (n_sample, 1)).T
+    #     # resahpe to allow for straight indexing
+    #     ref = np.tile(self.metadata['REF'].to_numpy(), (n_sample, 1)).T
+    #     alt = np.tile(self.metadata['ALT'].to_numpy(), (n_sample, 1)).T
 
-        i_max_p = np.argmax(probs, axis=2)
-        genotype_allele[i_max_p == 0] = ref[i_max_p == 0] + ref[i_max_p == 0]
+    #     i_max_p = np.argmax(probs, axis=2)
+    #     genotype_allele[i_max_p == 0] = ref[i_max_p == 0] + ref[i_max_p == 0]
         
-        # Sort needs a single array, but to add characters it needs two arrays 
-        tmp = np.split(np.sort(np.vstack((ref[i_max_p == 1],
-                                          alt[i_max_p == 1])).astype(str),
-                               axis=1),
-                       2, axis=0)
-        g_allele = np.squeeze(np.char.add(tmp[0], tmp[1]))
-        genotype_allele[i_max_p == 1] = g_allele
+    #     # Sort needs a single array, but to add characters it needs two arrays 
+    #     tmp = np.split(np.sort(np.vstack((ref[i_max_p == 1],
+    #                                       alt[i_max_p == 1])).astype(str),
+    #                            axis=1),
+    #                    2, axis=0)
+    #     g_allele = np.squeeze(np.char.add(tmp[0], tmp[1]))
+    #     genotype_allele[i_max_p == 1] = g_allele
 
-        genotype_allele[i_max_p == 2] = alt[i_max_p == 2] + alt[i_max_p == 2]
-        genotype_012 = i_max_p
+    #     genotype_allele[i_max_p == 2] = alt[i_max_p == 2] + alt[i_max_p == 2]
+    #     genotype_012 = i_max_p
 
-        genotype_allele = pd.DataFrame(data=genotype_allele,
-                                       index=self.rsids,
-                                       columns=samples)
-        genotype_012 = pd.DataFrame(data=genotype_012,
-                                    index=self.rsids,
-                                    columns=samples)
-        # TODO: DONE make two functions, one returns genotype_* and the oother 
-        # returns the dosage and riskscore
-        if weights is not None:
-            ea = w['ea'].to_numpy()
-            ea = np.tile(ea, (n_sample, 1)).T
+    #     genotype_allele = pd.DataFrame(data=genotype_allele,
+    #                                    index=self.rsids,
+    #                                    columns=samples)
+    #     genotype_012 = pd.DataFrame(data=genotype_012,
+    #                                 index=self.rsids,
+    #                                 columns=samples)
+    #     # TODO: DONE make two functions, one returns genotype_* and the oother 
+    #     # returns the dosage and riskscore
+    #     if weights is not None:
+    #         ea = w['ea'].to_numpy()
+    #         ea = np.tile(ea, (n_sample, 1)).T
 
-            # compute individual dosage
-            mask_ea_eq_ref = ea == ref
-            mask_ea_eq_alt = ea == alt
+    #         # compute individual dosage
+    #         mask_ea_eq_ref = ea == ref
+    #         mask_ea_eq_alt = ea == alt
 
-            dosage = np.zeros((n_rsid, n_sample))
-            dosage[mask_ea_eq_ref] = (probs[mask_ea_eq_ref, 1]
-                                      + 2 * probs[mask_ea_eq_ref, 0])
-            dosage[mask_ea_eq_alt] = (probs[mask_ea_eq_alt, 1]
-                                      + 2 * probs[mask_ea_eq_alt, 2])
+    #         dosage = np.zeros((n_rsid, n_sample))
+    #         dosage[mask_ea_eq_ref] = (probs[mask_ea_eq_ref, 1]
+    #                                   + 2 * probs[mask_ea_eq_ref, 0])
+    #         dosage[mask_ea_eq_alt] = (probs[mask_ea_eq_alt, 1]
+    #                                   + 2 * probs[mask_ea_eq_alt, 2])
 
-            wSNP = w['weight'].to_numpy().astype(float).reshape(n_rsid, 1)
-            riskscore = np.sum(dosage * wSNP, axis=0)
-            logger.info(f'Calculate riskscore using weights')
-            riskscore = pd.DataFrame(data=riskscore,
-                                     index=samples)
-            return genotype_allele, genotype_012, riskscore
-        else:
-            return genotype_allele, genotype_012
-            # TODO: DONE return pandas DataFrames? -> YES
-            # TODO: DONE adapt unit test to pandas output
+    #         wSNP = w['weight'].to_numpy().astype(float).reshape(n_rsid, 1)
+    #         riskscore = np.sum(dosage * wSNP, axis=0)
+    #         logger.info(f'Calculate riskscore using weights')
+    #         riskscore = pd.DataFrame(data=riskscore,
+    #                                  index=samples)
+    #         return genotype_allele, genotype_012, riskscore
+    #     else:
+    #         return genotype_allele, genotype_012
+    #         # TODO: DONE return pandas DataFrames? -> YES
+    #         # TODO: DONE adapt unit test to pandas output
 
     @classmethod
     def from_bgen(cls, files, verify_integrity=False):
@@ -971,7 +970,7 @@ class Genotype():
             raise_error("There are duplicated bgen files")
         # make sure that files exist
         if not all([Path(f).is_file() for f in files]):
-            raise_error('bgen file does not exist', FileNotFoundError())
+            raise_error('bgen file does not exist', FileNotFoundError)
 
         # read all the files
         logger.info(f'Reading {len(files)} bgen files...')

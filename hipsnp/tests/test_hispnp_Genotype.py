@@ -12,7 +12,7 @@ from pandas._testing import assert_frame_equal
 # import hipsnp_origen as hps_o
 from . import hipsnp_origen as hps_o
 
-# TODO: hard code expected results are given by the functions in test.
+# TODO: DONE hard code expected results are given by the functions in test.
 # make very small Genotype object to compute manualy the resutls.
 
 def test_read_bgen_for_Genotype_has_metadata():
