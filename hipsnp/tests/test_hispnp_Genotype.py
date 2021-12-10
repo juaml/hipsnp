@@ -2,14 +2,12 @@ import copy
 import shutil
 import tempfile
 from pathlib import Path
-from _pytest.python_api import raises
 import datalad.api as dl
 import hipsnp as hps
 import numpy as np
 import pandas as pd
 import pytest
 from pandas._testing import assert_frame_equal
-# import hipsnp_origen as hps_o
 from . import hipsnp_origen as hps_o
 
 # TODO: DONE hard code expected results are given by the functions in test.
@@ -411,7 +409,7 @@ def test_consolidate_Genotype(in_place):
 def test__get_array_of_probabilites_and_samples():
     # the matrix of probabilites has the right values afeter consoloidating
     # probabilites
-    # generate random probs, create mock Genotype, re order samples, consolidate
+    # generate random probs, create mock Genotype, reorder samples, consolidate
     # get probabilites -> they are equal to inital prob.
 
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
@@ -840,8 +838,7 @@ def test_ensembl_human_rsid_read_RSIDs_csv_and_PGS():
     pathfiles = '/home/oportoles/Documents/MyCode/hipsnp/test_data/'
     rsidFile =  pathfiles + 'rsid_699_102.csv'
     rsid = ['rs699', 'rs102']
-    # ASK: data test files are stored locally, is there a better way to do it? 
-    # put the files on hipsnp/test/data folder and use relative paths
+
     out_str = hps.rsid2chromosome(rsid)
     out_f = hps.rsid2chromosome(rsidFile)
         

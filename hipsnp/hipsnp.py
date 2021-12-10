@@ -1,6 +1,4 @@
-# from logging import log, warning
 import os
-# import glob
 import shutil
 import requests
 import pandas as pd
@@ -12,9 +10,7 @@ from hipsnp.utils import warn, raise_error, logger
 import copy
 from functools import reduce
 
-# TODO: if condition is empty list, make explicit len(list) == 0
 
-# ASK: private method?
 def get_chromosome_data(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
                         imputation_dir='imputation', data_dir='/tmp/genetic'):
     """Get a particular chromosome's (imputed) data from a datalad dataset or
@@ -63,7 +59,7 @@ def get_chromosome_data(c, datalad_source='ria+http://ukb.ds.inm7.de#~genetic',
         
     return files, ds, getout
 
-# ASK: private method?
+
 def request_ensembl_rsid(rsid):
     """Make a REST call to ensemble.org and return a JSON object with
     the information of the variant of given a rsid
@@ -97,7 +93,6 @@ def request_ensembl_rsid(rsid):
     return response.json()
 
 
-# ASK: private method?
 def rsid_chromosome_DataFrame(rsids, chromosomes=None):
     """Build pandas DataFrame with rsids and chormosomes. If chormoseomes are
     not given they will be retrieved from ensembl.org for each rsids.
@@ -153,25 +148,11 @@ def rsid_chromosome_DataFrame(rsids, chromosomes=None):
     return df
 
 
-# def rsid_to_bgen() # TODO: DONE rename rsid2snp -> rsid_to_bgen
-# TODO: rename outdir to output_dir; data_dir to datalad_output
 def pruned_bgen_from_Datalad(
-    rsids, outdir,
-    datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
-    qctool=None, datalad_drop=True, datalad_drop_if_got=True,
-    data_dir=None, recompute=False, chromosomes=None,
-    chromosomes_use=None):
-    # ASK: chromosomes_use does not affect to the returned pandas
-    # DataFrame. Is this the wanted behavior? should it filter the 
-    # DataFrame by wanted chromosomes?
-    # ASK: is not redundant to ask for rsids and chromosomes? If a RSID has one
-    # and only one chromosome. Why should the used provide a chromosome to use?
-    # TODO: DONE change it to filter all outputs
-    # TODO: DONE change force name by recompute and set default to False
-
-    # ASK: why chromosome and chromosome_use? at the end it only keeps
-    # chromosomes in chromosome_use. According to the use case of presentation
-    # a set of chromosomes does not need to be subsampled
+        rsids, outdir,
+        datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
+        qctool=None, datalad_drop=True, datalad_drop_if_got=True,
+        data_dir=None, recompute=False, chromosomes=None):
     """ Creates or gets a .bgen format file with <rsids> and <chormosomes_use> 
     frome a datalad Dataset. .bgen file is created with qctool v2 (See notes)
 
@@ -197,9 +178,7 @@ def pruned_bgen_from_Datalad(
         by default False
     chromosomes : list of str, optional
         list of chromosomes to process, by default None which uses all
-        chromosomes
-    chromosomes_use : str or list of str, optional
-        subset of chromosomes to use, by default None which uses all chromosoms
+        chromosomes. There should be one chromosome of each rsid provided.
 
     Returns
     -------
@@ -223,23 +202,17 @@ def pruned_bgen_from_Datalad(
         raise_error(f'the output directory must be empty')
 
     # get chromosome of each rsid
-    if chromosomes and len(chromosomes) != len(rsids):
+    if chromosomes is not None and len(chromosomes) != len(rsids):
         raise_error('Mismatch between the number of chrmosomes and rsids')
 
     ch_rs = rsid_chromosome_DataFrame(rsids, chromosomes=chromosomes)
-    if chromosomes_use is not None:
-        ch_rs = ch_rs[ch_rs.chromosomes.isin(chromosomes_use)]
 
     uchromosomes = ch_rs['chromosomes'].unique()
     files = None
     ds = None
     logger.info(f'Chromosomes needed: {uchromosomes}')
     for c, ch in enumerate(uchromosomes):
-        # if chromosomes_use and ch not in chromosomes_use:
-        #     # TODO: check julearn how to catch warnings with pytest
-        #     warn(f'Chromosome {ch} not in the use list, skipping it')
-        #     continue
-        # with pytest.warns(RuntimeWarning)
+
         file_out = Path(outdir, 'chromosome' + str(ch) + 'bgen')
 
         if recompute is False and file_out.is_file():
@@ -268,7 +241,6 @@ def pruned_bgen_from_Datalad(
                 ds.remove(dataset=data_dir)
                 raise_error(f'datalad: error getting file {f_ix}: \
                               {getout_val["path"]} \n')                    
-                # TODO: DONE cleanup datalad files
             else:
                 logger.info(f'datalad: status {status} file {files[f_ix]}')
 
@@ -291,8 +263,8 @@ def pruned_bgen_from_Datalad(
         cmd = (qctool + ' -g ' + str(file_bgen) + ' -s ' + str(file_sample)
                + ' -incl-rsids ' + str(file_rsids)  + ' -og ' + str(file_out)
                + ' -ofiletype bgen_v1.2 -bgen-bits 8')
-               # from a .bgen and a .samples file, make a .bgen file with rsids
-               # in -incl-rsids in directory file_out 
+        # from a .bgen and a .samples file, make a .bgen file with rsids
+        # in -incl-rsids in directory file_out
 
         logger.info('running qctool: {cmd}\n')
         os.system(cmd)
@@ -353,9 +325,7 @@ def read_weights(weights):
         weights = weights.loc[~weights.index.duplicated()]
         warn(f'"weights" has duplicated RSIDs, only the first\
                 appearane will be kept')
-    # TODO: DONE allow for upper and lower case for ['A', 'C', 'T', 'G'] and 
-    # ['a', 'c', 't', 'g']. Start by trasnforming to uppercase, so no check of
-    # lower case is needed.
+
     if not np.isin(weights['ea'], ['A', 'C', 'T', 'G']).all():
         raise_error(f'effect allelel in weights is not "A", "C", "T", or "G"')
 
@@ -379,8 +349,8 @@ class Genotype():
                 the second dimension is 3.
         """
         self._validate_arguments(metadata, probabilities)
-        self._metadata = metadata  # pandas dataframe == snp
-        self._probabilities = probabilities  # dicttuple(samples, probabilites)
+        self._metadata = metadata  
+        self._probabilities = probabilities 
         self._consolidated = False
 
     @property
@@ -452,8 +422,6 @@ class Genotype():
         If both filters are None, this method returns the same object, not
         a copy of it.
         """
-        # TODO: DONE make possible that filter happnes inplace
-        # TODO: DONE unittest filter with weights
         if rsids is None and samples is None and weights is None:
             warn(f'No paramters to filter were given to filter()')
             if inplace:
@@ -611,8 +579,6 @@ class Genotype():
         ValueError
             If the samples cannot be read or duplicated.
         """
-        # TODO: DONE do not return 3d prob. matrix. To get the MAtrix should 
-        # be another method
         out = self._consolidate_samples(inplace)
         return out
 
@@ -663,46 +629,14 @@ class Genotype():
     def _get_array_of_probabilites(self):
         """Iterate RSIDS over consolidated dictionary of probabilites to build
         a single 3d numpy array with all the probabiites."""
-        # TODO: DONE returns 3d matrix of probabilites
         n_samples = list(self.probabilities.values())[0][0].shape[0]
         consol_prob_matrix = np.zeros((len(self.probabilities),  # RSIDs
                                        n_samples,                # Samples
                                        3))                       # probability
-        # for i, smpl_prob in enumerate(sorted(self.probabilities.items())):
-        #     consol_prob_matrix[i, :, :] = smpl_prob[1][1]
+
         for i, smpl_prob in enumerate(self.probabilities.values()):
             consol_prob_matrix[i, :, :] = smpl_prob[1]
         return consol_prob_matrix
-
-    # def filter_by_weigths(self, weights, inplace=True):
-    #     # match filter RSIDs with RSIDs in Genotype
-    #     """ Reduce RSIDs to those present in the weigths file. weights should be
-    #     read with the function read_weights() to make sure that the weigths 
-    #     variable has the proper form
-
-    #     Parameters
-    #     ----------
-    #     weights : DataFrame
-    #         Pandas DataFrame with weightis as provided by read_weigts()
-    #     inplace : bool, optional
-    #         If True retruns the same object, otherwise returns a new object
-    #         , by default True
-
-    #     Returns
-    #     -------
-    #     Genotype or None:
-    #         Genotype with RSIDs matching to weights file if inplace = False,
-    #         None if inplace = True
-
-    #     """
-
-    #     rsids = weights.index.to_list()
-    #     if inplace:
-    #         self._filter_by_rsids(rsids=rsids, inplace=inplace)
-    #         return None
-    #     else:
-    #         out = self._filter_by_rsids(rsids=rsids, inplace=inplace)
-    #         return out
 
     def alleles(self, rsids=None, samples=None):
         """Get alleles for a Genotype and if weiths are given it computes the 
@@ -722,7 +656,6 @@ class Genotype():
         genotype_012 : pandas DataFrame
         """
         # TODO: Documnet retrun       
-        # TODO: DONE uinit test it
 
         if rsids is not None or samples is not None:
             gen_filt = self.filter(samples=samples, rsids=rsids, inplace=False)
@@ -753,7 +686,6 @@ class Genotype():
         genotype_allele[i_max_p == 0] = ref[i_max_p == 0] + ref[i_max_p == 0]
         
         # Sort needs a single array, but to add characters it needs two arrays 
-        # ASK: is sorting needed? in talk said that it is not important
         tmp = np.split(np.sort(np.vstack((ref[i_max_p == 1],
                                           alt[i_max_p == 1])).astype(str),
                                axis=1),
@@ -842,100 +774,6 @@ class Genotype():
         riskscore = pd.DataFrame(data=riskscore,
                                  index=gen_filt.unique_samples())
         return dosage, riskscore
-        # TODO: DONE unitest it
-
-    # def snp2genotype(self, rsids=None, samples=None, weights=None):
-    #     """Get alleles for a Genotype and if weiths are given it computes the 
-    #     risck scores.
-
-    #     Parameters
-    #     ----------
-    #     rsids : list of str, optional
-    #         rsids to be used, by default None
-    #     samples : list of str, optional
-    #         Samples to be used, by default None
-    #     weights : str, optional
-    #         Path to CSV file with weights, by default None
-
-    #     Returns
-    #     -------
-        
-    #     """
-    #     # TODO: Documnet retrun       
-    #     # TODO: DONE uinit test it
-    #     if weights is not None:
-    #         w = read_weights(weights)
-    #         self.filter_by_weigths(w, inplace=True)
- 
-    #     self.filter(samples=samples, rsids=rsids, inplace=True)
-
-    #     if not self.is_consolidated:
-    #         self.consolidate(inplace=True)
-
-    #     probs = self.get_array_of_probabilities()
-
-    #     # TODO: DONE Filter out bad SNPS
-
-    #     n_rsid = len(self.rsids)
-    #     samples = self.probabilities[self.rsids[0]][0]
-    #     n_sample = len(samples)
-
-    #     logger.info(f'Calculating genotypes for {n_rsid} SNPs and \
-    #                 {n_sample} samples ... ')
-
-    #     genotype_allele = np.empty((n_rsid, n_sample), dtype=object)
-    #     genotype_012 = np.zeros((n_rsid, n_sample), dtype=int)
-
-    #     # resahpe to allow for straight indexing
-    #     ref = np.tile(self.metadata['REF'].to_numpy(), (n_sample, 1)).T
-    #     alt = np.tile(self.metadata['ALT'].to_numpy(), (n_sample, 1)).T
-
-    #     i_max_p = np.argmax(probs, axis=2)
-    #     genotype_allele[i_max_p == 0] = ref[i_max_p == 0] + ref[i_max_p == 0]
-        
-    #     # Sort needs a single array, but to add characters it needs two arrays 
-    #     tmp = np.split(np.sort(np.vstack((ref[i_max_p == 1],
-    #                                       alt[i_max_p == 1])).astype(str),
-    #                            axis=1),
-    #                    2, axis=0)
-    #     g_allele = np.squeeze(np.char.add(tmp[0], tmp[1]))
-    #     genotype_allele[i_max_p == 1] = g_allele
-
-    #     genotype_allele[i_max_p == 2] = alt[i_max_p == 2] + alt[i_max_p == 2]
-    #     genotype_012 = i_max_p
-
-    #     genotype_allele = pd.DataFrame(data=genotype_allele,
-    #                                    index=self.rsids,
-    #                                    columns=samples)
-    #     genotype_012 = pd.DataFrame(data=genotype_012,
-    #                                 index=self.rsids,
-    #                                 columns=samples)
-    #     # TODO: DONE make two functions, one returns genotype_* and the oother 
-    #     # returns the dosage and riskscore
-    #     if weights is not None:
-    #         ea = w['ea'].to_numpy()
-    #         ea = np.tile(ea, (n_sample, 1)).T
-
-    #         # compute individual dosage
-    #         mask_ea_eq_ref = ea == ref
-    #         mask_ea_eq_alt = ea == alt
-
-    #         dosage = np.zeros((n_rsid, n_sample))
-    #         dosage[mask_ea_eq_ref] = (probs[mask_ea_eq_ref, 1]
-    #                                   + 2 * probs[mask_ea_eq_ref, 0])
-    #         dosage[mask_ea_eq_alt] = (probs[mask_ea_eq_alt, 1]
-    #                                   + 2 * probs[mask_ea_eq_alt, 2])
-
-    #         wSNP = w['weight'].to_numpy().astype(float).reshape(n_rsid, 1)
-    #         riskscore = np.sum(dosage * wSNP, axis=0)
-    #         logger.info(f'Calculate riskscore using weights')
-    #         riskscore = pd.DataFrame(data=riskscore,
-    #                                  index=samples)
-    #         return genotype_allele, genotype_012, riskscore
-    #     else:
-    #         return genotype_allele, genotype_012
-    #         # TODO: DONE return pandas DataFrames? -> YES
-    #         # TODO: DONE adapt unit test to pandas output
 
     @classmethod
     def from_bgen(cls, files, verify_integrity=False):
@@ -1019,10 +857,7 @@ class Genotype():
                     mask_to_keep = np.ones(len(bgen.rsids), dtype=np.bool_)
         
                 if any(mask_to_keep):
-                    # get REF and ALT
-                    # TODO: DONE ref and alt should be A, C, T, or G
-                    # alleles = bgen.allele_ids[mask_to_keep]
-                    # alleles = np.array([a.split(',') for a in alleles])
+
                     alleles = np.array(
                         [np.char.upper(val) for val in
                          np.char.split(bgen.allele_ids[mask_to_keep],

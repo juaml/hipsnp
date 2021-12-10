@@ -2,7 +2,6 @@ import copy
 import shutil
 import tempfile
 from pathlib import Path
-from _pytest.python_api import raises
 import datalad.api as dl
 import hipsnp as hps
 import numpy as np
@@ -10,13 +9,9 @@ import pandas as pd
 import pytest
 from pandas._testing import assert_frame_equal
 
-# from hipsnp.hipsnp import Genotype
-# import hipsnp_origen as hps_o
 
 # This test does not compare the ouputs of the previous verions to the latest.
 # This test is intended to be a stand alone test for final package
-
-# TODO: put test files into test/data folder and use relative paths
 
 def validatePANDAScolumns(outPANDAS, refColFields):
     outFields = [field for field in outPANDAS.columns]
@@ -508,7 +503,6 @@ def test_consolidate_Genotype(in_place):
     # ------ #
     gen_mod = copy.deepcopy(gen_ref)
     odd_rsid = 'RSID_5'
-    # n_rsid = 198
     other_samples = np.array([s[:7] + '10' + s[7:] for s in
                               gen_ref._probabilities[odd_rsid][0]])
     tmp_tuple_rsid = (other_samples,
@@ -521,9 +515,9 @@ def test_consolidate_Genotype(in_place):
 
 def test__get_array_of_probabilites_and_samples():
     # the matrix of probabilites has the right values afeter consoloidating
-    # probabilites
-    # generate random probs, create mock Genotype, re order samples, consolidate
-    # get probabilites -> they are equal to inital prob.
+    # probabilites generate random probs, create mock Genotype, 
+    # re order samples, consolidate get probabilites -> 
+    # they are equal to inital prob.
 
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -578,7 +572,6 @@ def test_pruned_bgen_from_Datalad_as_before_Genotype():
     rsids = ['RSID_101']
     chromosomes = ['1']
     qctool = '/home/oportoles/Apps/qctool_v2.0.6-Ubuntu16.04-x86_64/qctool'
-    # ASK: how do I set this path for testing?
     with tempfile.TemporaryDirectory() as tempdir:
 
         ch_rs, files, dataL = hps.pruned_bgen_from_Datalad(
@@ -590,8 +583,7 @@ def test_pruned_bgen_from_Datalad_as_before_Genotype():
             datalad_drop_if_got=True,
             data_dir=tempdir,
             recompute=False,
-            chromosomes=chromosomes,
-            chromosomes_use=None)
+            chromosomes=chromosomes)
         filesRef = [tempdir + '/imputation/' + 'example_c' +
                     str(chromosomes[0]) + '_v0.bgen',
                     tempdir + '/imputation/' + 'example_c' +
@@ -619,16 +611,16 @@ def test_get_chromosome_data_outputTypes_pass():
             tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.bgen',
             tempdir + '/imputation/' + 'example_c' + str(c) + '_v0.sample']
         files, ds, getout = hps.get_chromosome_data(c=c, datalad_source=source,
-                                               data_dir=tempdir)
+                                                    data_dir=tempdir)
         assert sorted([Path(f) for f in filesRef]) == sorted(files)
         assert type(ds) == dl.Dataset
         assert _filesHaveName(getout)
 
         # chromosome given as int intead of str
         c = 1
-        files_i, ds_i, getout_i = hps.get_chromosome_data(c=c,
-                                                     datalad_source=source,
-                                                     data_dir=tempdir)
+        files_i, _, getout_i = hps.get_chromosome_data(c=c,
+                                                       datalad_source=source,
+                                                       data_dir=tempdir)
         assert files_i == files
         assert getout_i[0]['message'] == 'already present'
 
@@ -643,7 +635,9 @@ def test_get_chromosome_data_outputTypes_pass():
         # chormosome 'c' does not match chromosome on datalad sourc
         c = '23'
         with pytest.raises(ValueError):
-            hps.get_chromosome_data(c=c, datalad_source=source, data_dir=tempdir)
+            hps.get_chromosome_data(c=c,
+                                    datalad_source=source,
+                                    data_dir=tempdir)
 
     # woring path to chormosome files
     with tempfile.TemporaryDirectory() as tempdir:
@@ -681,8 +675,7 @@ def test_request_ensembl_rsid_read_RSIDs_csv_and_PGS():
     pathfiles = str(Path().cwd().joinpath("hipsnp", "tests", "test_data"))
     rsidFile =  pathfiles + '/rsid_699_102.csv'
     rsid = ['rs699', 'rs102']
-    # ASK: data test files are stored locally, is there a better way to do it? 
-    # put the files on hipsnp/test/data folder and use relative paths
+
     out_str = hps.rsid_chromosome_DataFrame(rsid)
     out_f = hps.rsid_chromosome_DataFrame(rsidFile)
         
