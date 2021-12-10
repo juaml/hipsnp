@@ -9,6 +9,11 @@ Requirements
 
 hipsnp requires the following packages:
 
+datalad>=0.14.0
+pandas>=1.1.2
+numpy>=1.21.2
+bgen_reader>=4.0.8
+
 Running the examples requires:
 
 Depending on the installation method, this packages might be installed
