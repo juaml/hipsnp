@@ -124,7 +124,6 @@ def rsid_chromosome_DataFrame(rsids, chromosomes=None):
         rsids = [rsids]
 
     if chromosomes is None:
-        # TODO: DONE test with chromosome None
         # get from ensembl
         chromosomes = [None] * len(rsids)
         for rs in range(len(rsids)):
@@ -153,7 +152,7 @@ def pruned_bgen_from_Datalad(
         datalad_source="ria+http://ukb.ds.inm7.de#~genetic",
         qctool=None, datalad_drop=True, datalad_drop_if_got=True,
         data_dir=None, recompute=False, chromosomes=None):
-    """ Creates or gets a .bgen format file with <rsids> and <chormosomes_use> 
+    """ Creates a .bgen format file with <rsids> and <chormosomes> 
     frome a datalad Dataset. .bgen file is created with qctool v2 (See notes)
 
     Parameters
@@ -302,7 +301,7 @@ def read_weights(weights):
 
     Rasises
     -------
-    ValueErthe CSV does not contain reuired fields or infromation is worng
+    ValueErthe CSV does not contain required fields or infromation is worng
     """
     try:
         weights = pd.read_csv(weights, sep='\t', comment='#',
@@ -346,7 +345,8 @@ class Genotype():
                 Dictionary where keys areRSIDS (str) and values are a tuple
                 (Samples (str), probabilites (2d numpy array)).
                 The first dimension of probabilites are Samples and
-                the second dimension is 3.
+                the second dimension is 3 and contains probabilito of each
+                allel combination REF-REF, ALT-REF, and ALT-ALT.
         """
         self._validate_arguments(metadata, probabilities)
         self._metadata = metadata  
@@ -355,18 +355,58 @@ class Genotype():
 
     @property
     def rsids(self):
+        """list of all rsids
+
+        Returns
+        -------
+        list of str
+            list containing the rsids presnt in the Genotype object
+        """
         return list(self._metadata.index)
 
     @property
     def is_consolidated(self):
+        """Wether the data in genotype is consoloidated. Consolidated data
+        contains only rsids with samples which are present in all rsids.
+
+        Returns
+        -------
+        bool
+            True if consolidate
+        """
         return self._consolidated
 
     @property
     def metadata(self):
+        """[summary]
+
+        Returns
+        -------
+        [type]
+            [description]
+        """        """"""
+        """Metadata information with at least 'REF', 'ALT', 'CHROMosome', 
+        'POSistion', 'ID', and 'FORMAT' as in .bgen files"""
         return self._metadata
     
     @property
     def probabilities(self):
+        """ Probability of each allele combination foir each sample of an rsids
+
+        Returns
+        -------
+        dict of tuples with a list of str and a 2d numpy array
+            Dictionay keys are rsids. Dictionary values are a two elements
+            tuple. The first element contains list with the sample names of the
+            the probalities contained in the second element of the tuple. The
+            second element of hte tuple is a numpy array with the first
+            dimension equal to the length of the list of sample in the first
+            elelment of the tuple. The second dimension of the numpy array has
+            the three probalities associated to the allele combinations
+            REF-REF, ALT-REF, and ALT-ALT. Therofe each row in the numpy array
+            contains the three probabilites of each sample in the first element
+            of the tuple.
+        """
         return self._probabilities
     
     def unique_samples(self):
@@ -611,13 +651,17 @@ class Genotype():
             return out
 
     def get_array_of_probabilities(self):
-        """Return a 3D array with the probabilties of all RSIDs and samples. If 
-        Genotype is not consolidated, it is first consolidated
+        """Return a 3D array with the probabilties of the three allele
+        combinations for all RSIDs and samples. To obtain the probalities, the 
+        Genotype object data must be consolidate. (see consolidate())
 
         Retruns
         -------
-        3D numpy array with rsid by samples by 3 dimensions with probabilites
-
+        3D numpy array
+            first dimension are rsid sorted as Genotype.rsids(). Second 
+            dimension are samples sorted as Genotype.unique_samples(). Third 
+            dimension are the probalities of the allele combinations
+            REF-REF, ALT-REF, and ALT-ALT
         """
         if not self.is_consolidated:
             raise_error('Samples are not consolidated across RSIDs. Samples\
@@ -652,11 +696,12 @@ class Genotype():
         Returns
         -------
         genotype_allele: pandas DataFrame
+            Alleles of each rsid and sample 
         
         genotype_012 : pandas DataFrame
-        """
-        # TODO: Documnet retrun       
+            index of most probable allele 0=REF-REF , 1=ALTREF, 2=ALTALT 
 
+        """
         if rsids is not None or samples is not None:
             gen_filt = self.filter(samples=samples, rsids=rsids, inplace=False)
         else:
@@ -665,9 +710,7 @@ class Genotype():
         if not gen_filt.is_consolidated:
             gen_filt.consolidate(inplace=True)
 
-        probs = gen_filt.get_array_of_probabilities()  # private
-
-        # TODO: DONE Filter out bad SNPS
+        probs = gen_filt.get_array_of_probabilities() 
 
         n_rsid = len(gen_filt.rsids)
         n_sample = len(gen_filt.unique_samples())
