@@ -1,0 +1,8 @@
+ref 	- bgen.allele_ids[:,0]
+alt 	- bgen.allele_ids[:,1]
+chrom 	- bgen.chromosome
+pos 	- bgen.position
+id 	- bgen.ids
+format 	= 'GP'
+ 
+ ref and alt should be A, C, T, or G
