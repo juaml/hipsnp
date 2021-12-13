@@ -9,7 +9,7 @@ from distutils.version import LooseVersion
 from pathlib import Path
 import warnings
 
-logger = logging.getLogger('hipsnp')
+logger = logging.getLogger('HIPSNP')
 
 
 def _get_git_head(path):
@@ -69,6 +69,7 @@ def log_versions():
     _safe_log(versions, 'numpy')
     _safe_log(versions, 'scipy')
     _safe_log(versions, 'bgen_reader')
+    _safe_log(versions, 'datalad')
     _safe_log(versions, 'pandas')
 
     logger.info('========================')
@@ -118,7 +119,7 @@ def configure_logging(level='WARNING', fname=None, overwrite=None,
         mode = 'w' if overwrite else 'a'
         lh = logging.FileHandler(fname, mode=mode)
     else:
-        lh = logging.StreamHandler(WrapStdOut())
+        lh = logging.StreamHandler(WrapStdOut())  # type: ignore
 
     if isinstance(level, str):
         level = _logging_types[level]

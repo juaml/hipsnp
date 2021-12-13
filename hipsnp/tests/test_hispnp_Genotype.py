@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from pandas._testing import assert_frame_equal
+
 from . import hipsnp_origen as hps_o
 
 # TODO: DONE hard code expected results are given by the functions in test.
@@ -19,12 +20,13 @@ def test_read_bgen_for_Genotype_has_metadata():
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     with tempfile.TemporaryDirectory() as tmpdir:
         print(tmpdir + '/')
-        dataset = dl.clone(source=source, path=tmpdir + '/')
+        dataset = dl.install(source=source, path=tmpdir + '/')
         dataset.get()
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
 
         # original code
-        snpdata, probsdata = hps_o.read_bgen(files=bgenfile,
+        snpdata, probsdata = hps_o.read_bgen(
+            files=bgenfile,
                                              rsids_as_index=True,
                                              no_neg_samples=False,
                                              join='inner',
@@ -428,13 +430,13 @@ def test__get_array_of_probabilites_and_samples():
         gen.get_array_of_probabilities()
 
     with pytest.raises(ValueError):
-        gen.unique_samples()
+        gen.consolidated_samples()
 
     gen.consolidate()
     probs = gen.get_array_of_probabilities()
     assert np.array_equal(mockprob, probs)
    
-    samples = gen.unique_samples()
+    samples = gen.consolidated_samples()
     assert isinstance(samples[0], str)
     assert samples.shape[0] == 500
 

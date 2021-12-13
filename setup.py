@@ -7,8 +7,8 @@ with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 
-DOWNLOAD_URL = 'https://github.com/oportoles/hipsnp/'
-URL = 'http://oportoles.github.io/hipsnp/'
+DOWNLOAD_URL = 'https://github.com/juaml/hipsnp/'
+URL = 'http://juaml.github.io/hipsnp/'
 
 setuptools.setup(
     name='hipsnp',
