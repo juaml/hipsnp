@@ -145,7 +145,7 @@ def raise_error(msg, klass=ValueError):
         Error message
     klass : class of the error to raise. Defaults to ValueError
     """
-    logger.error(msg)
+    logger.error(msg, stacklevel=2)
     raise klass(msg)
 
 
@@ -159,7 +159,7 @@ def warn(msg, category=RuntimeWarning):
         The warning class. Defaults to ``RuntimeWarning``.
     """
     logger.warning(msg)
-    warnings.warn(msg, category=category)
+    warnings.warn(msg, category=category, stacklevel=2)
 
 
 class WrapStdOut(object):

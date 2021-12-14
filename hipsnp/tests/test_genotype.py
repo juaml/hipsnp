@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import datalad.api as dl
 
+from pandas._testing import assert_frame_equal
 import pytest
 
 import hipsnp as hps
@@ -29,11 +30,10 @@ def test_validate_arguments_column_metadata(columns, isgood):
 
 
 def test_validate_arguments_rsids():
-    "Force Exception that checks same rsids in metadata and probabilites"
+    "Force Exception that checks same rsids in metadata and probabilities"
 
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
     with tempfile.TemporaryDirectory() as tmpdir:
-        print(tmpdir + '/')
         dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
         dataset.get()
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
@@ -133,7 +133,7 @@ def test_filter():
     assert all(n_filt_samples == n_sample_mock_data)
     assert all(n_filt_probs == n_sample_mock_data)
 
-    # RSIDs filterd out form metadata and probabilites
+    # RSIDs filterd out form metadata and probabilities
     assert n_keep_rsids == gen_filt_rsid.metadata.index.shape[0]
     assert n_keep_rsids == len(gen_filt_rsid.probabilities.keys())
 
@@ -207,16 +207,12 @@ def test_filter():
     with pytest.raises(ValueError, match='No RSIDs matching'):
         gen_ref.filter(weights=data_path / 'weights_noMatchRSID.csv')
 
-    weights_files = [
-        'weights_5.csv', 'weights_5_unsortedRSID.csv',
-        'weights_5_duplicatedRSID.csv']
-
     rsids_weights_5 = ['RSID_2', 'RSID_3', 'RSID_5', 'RSID_6', 'RSID_7']
     rsids_weights_dup = ['RSID_2', 'RSID_5', 'RSID_6', 'RSID_7']
     keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
                   'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']
 
-    for fname in [ 'weights_5.csv', 'weights_5_unsortedRSID.csv']:
+    for fname in ['weights_5.csv', 'weights_5_unsortedRSID.csv']:
         gen_filt = gen_ref.filter(
             rsids=keep_rsids, weights=data_path / fname,
             inplace=False)
@@ -226,9 +222,10 @@ def test_filter():
                 sorted(rsids_weights_5))
 
     fname = 'weights_5_duplicatedRSID.csv'
-    gen_filt = gen_ref.filter(
-        rsids=keep_rsids, weights=data_path / fname,
-        inplace=False)
+    with pytest.warns(RuntimeWarning, match='duplicated RSIDs'):
+        gen_filt = gen_ref.filter(
+            rsids=keep_rsids, weights=data_path / fname,
+            inplace=False)
     assert (sorted(gen_filt.probabilities.keys()) ==
             sorted(rsids_weights_dup))
     assert (sorted(gen_filt.metadata.index) ==
@@ -246,14 +243,16 @@ def test_filter():
                 sorted(keep_rsids))
 
     fname = 'weights_5_duplicatedRSID.csv'
-    gen_filt = gen_ref.filter(
-        rsids=keep_rsids, weights=data_path / fname,
-        inplace=False)
+    with pytest.warns(RuntimeWarning, match='duplicated RSIDs'):
+        gen_filt = gen_ref.filter(
+            rsids=keep_rsids, weights=data_path / fname,
+            inplace=False)
     assert (sorted(gen_filt.probabilities.keys()) ==
             sorted(['RSID_2']))
     assert (sorted(gen_filt.metadata.index) ==
             sorted(['RSID_2']))
 
+    fname = 'weights_5.csv'
     with pytest.raises(ValueError, match='No RSIDs matching'):
         gen_ref.filter(
             rsids='RSID_2000', weights=data_path / fname, inplace=False)
@@ -272,7 +271,7 @@ def test_consolidate():
 
     # 1. Randomize samples in one RSID
     gen_mod = gen_ref._clone()
-
+    np.random.seed(10)
     rand_idx = np.arange(500)
     np.random.shuffle(rand_idx)
     tmp_tuple_rsid = (gen_ref._probabilities['RSID_3'][0][rand_idx],
@@ -363,7 +362,7 @@ def test_consolidate():
         gen_mod.consolidate(inplace=True)
 
 
-def test__consolidated_probabilites():
+def test__consolidated_probabilities():
     """Test obtaining the consolidated probabilities"""
     source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
 
@@ -375,20 +374,81 @@ def test__consolidated_probabilites():
         gen_ref = hps.read_bgen(files=bgenfile)
 
     with pytest.raises(ValueError, match='are not consolidated'):
-        gen_ref._consolidated_probabilites()
+        gen_ref._consolidated_probabilities()
 
         with pytest.raises(ValueError, match='are not consolidated'):
             gen_ref._consolidated_samples()
 
+    np.random.seed(10)
     mockprob = np.random.randn(199, 500, 3)  # num. of rsids & samples source
     for i, rsid_val in enumerate(gen_ref.probabilities.items()):
         gen_ref._probabilities[rsid_val[0]] = \
             (rsid_val[1][0], np.squeeze(mockprob[i, :, :]))
 
     gen_ref.consolidate()
-    probs = gen_ref._consolidated_probabilites()
+    probs = gen_ref._consolidated_probabilities()
     assert np.array_equal(mockprob, probs)
 
     samples = gen_ref._consolidated_samples()
     assert isinstance(samples[0], str)
     assert samples.shape[0] == 500
+
+
+def test_alleles_riskscore():
+    """Test the alleles and riskscore method of the Genotype class"""
+    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # example data
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
+        dataset.get()
+        bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
+        gen = hps.read_bgen(files=bgenfile)
+
+    mock_meta = gen.metadata.loc[['RSID_2', 'RSID_3']]
+    mock_samples = gen.probabilities['RSID_2'][0][:2]
+    mock_prob = {
+        'RSID_2': (mock_samples, np.array([[0.25, 0.25, 0.5],
+                                           [0.5, 0.25, 0.25]])),
+        'RSID_3': (mock_samples, np.array([[1.0, 0.0, 0.0],
+                                           [0.0, 1.0, 0.0]]))}
+
+    mockGen = hps.Genotype(mock_meta, mock_prob)
+
+    mock_g_012 = pd.DataFrame(data=np.array([[2, 0], [0, 1]]),
+                              index=['RSID_2', 'RSID_3'],
+                              columns=mock_samples)
+
+    mock_g_ale = pd.DataFrame(data=np.array([['GG', 'AA'], ['AA', 'AG']]),
+                              index=['RSID_2', 'RSID_3'],
+                              columns=mock_samples)
+
+    mock_dosage = pd.DataFrame(data=np.array([[0.75, 1.25],
+                                              [2.0, 1.0]]),
+                               index=['RSID_2', 'RSID_3'],
+                               columns=mock_samples)
+
+    mock_risk = pd.DataFrame(data=np.array([4.75, 3.25]),
+                             index=mock_samples)
+
+    data_path = hps.utils.testing.get_testing_data_dir()
+    mock_w = data_path / 'weights_5.csv'
+
+    g_ale, g_012 = mockGen.alleles()
+    dosage, risk = mockGen.riskscores(weights=mock_w)
+    assert_frame_equal(g_012, mock_g_012)
+    assert_frame_equal(g_ale, mock_g_ale)
+    assert_frame_equal(dosage, mock_dosage)
+    assert_frame_equal(risk, mock_risk)
+
+    # test 2: filter by rsid
+    mock_risk_filt_rs = np.array([[0.75], [1.25]])
+
+    g_ale, g_012 = mockGen.alleles(rsids='RSID_2')
+    dosage, risk = mockGen.riskscores(rsids='RSID_2', weights=mock_w)
+    np.testing.assert_array_equal(
+        g_012.loc['RSID_2'].values, mock_g_012.loc['RSID_2'].values)
+    np.testing.assert_array_equal(
+        g_ale.loc['RSID_2'].values, mock_g_ale.loc['RSID_2'].values)
+    np.testing.assert_array_equal(
+        dosage.loc['RSID_2'].values, mock_dosage.loc['RSID_2'].values)
+    np.testing.assert_array_equal(mock_risk_filt_rs, risk.values)
