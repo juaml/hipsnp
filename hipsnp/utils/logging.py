@@ -11,6 +11,10 @@ import warnings
 
 logger = logging.getLogger('HIPSNP')
 
+_use_stacklevel = False
+if sys.version.info[0] == 3 and sys.version.info[1] >= 8:  # type: ignore
+    _use_stacklevel = True
+
 
 def _get_git_head(path):
     """Aux function to read HEAD from git"""
@@ -145,7 +149,10 @@ def raise_error(msg, klass=ValueError):
         Error message
     klass : class of the error to raise. Defaults to ValueError
     """
-    logger.error(msg, stacklevel=2)
+    params = {}
+    if _use_stacklevel is True:
+        params['stacklevel'] = 2
+    logger.error(msg, **params)
     raise klass(msg)
 
 
@@ -159,7 +166,10 @@ def warn(msg, category=RuntimeWarning):
         The warning class. Defaults to ``RuntimeWarning``.
     """
     logger.warning(msg)
-    warnings.warn(msg, category=category, stacklevel=2)
+    params = {}
+    if _use_stacklevel is True:
+        params['stacklevel'] = 2
+    warnings.warn(msg, category=category, **params)
 
 
 class WrapStdOut(object):

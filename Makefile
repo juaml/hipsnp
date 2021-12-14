@@ -12,4 +12,4 @@ spellcheck:
 	codespell hipsnp/ docs/ examples/
 
 test:
-	pytest -v
+	tox
