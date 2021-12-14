@@ -14,7 +14,7 @@ import hipsnp as hps
 def test_from_bgen_multiple_identical_files():
     """The same file is passed multiple times to read_bgen"""
     nFiles = 5
-    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen'
     with tempfile.TemporaryDirectory() as tmpdir:
         print(tmpdir + '/')
         dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
@@ -29,7 +29,7 @@ def test_from_bgen_multiple_identical_files():
 def test_from_bgen_files_duplicate_rsid():
     """Copy and rename a mock file to have variaous files with same content
     Duplicated RSIDs should be ignored"""
-    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen'
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
         dataset.get()
@@ -132,7 +132,7 @@ def test_get_qctool():
 
 def test_genotype_from_datalad():
 
-    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen'
     rsids = ['RSID_2', 'RSID_3', 'RSID_5', 'RSID_6', 'RSID_7']
     chromosomes = ['1'] * len(rsids)
     with tempfile.TemporaryDirectory() as datadir:
