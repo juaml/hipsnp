@@ -14,6 +14,9 @@ pandas>=1.1.2
 numpy>=1.21.2
 bgen_reader>=4.0.8
 
+Additionally, hipsnp requires that QCTOOL is installed: 
+https://www.well.ox.ac.uk/~gav/qctool/documentation/download.html
+
 Running the examples requires:
 
 Depending on the installation method, this packages might be installed
@@ -75,7 +78,7 @@ Then, clone `hipsnp Github`_ repository in a folder of your choice:
 
 .. code-block:: bash
 
-    git clone http://oportoles.github.io/hipsnp/.git
+    git clone https://github.com/juaml/hipsnp/
 
 Install development mode requirements:
 

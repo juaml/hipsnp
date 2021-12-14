@@ -23,7 +23,7 @@
 .. _`conda env`: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
 
 .. _`Github`: https://github.com/
-.. _`hipsnp Github`: http://oportoles.github.io/hipsnp/
+.. _`hipsnp Github`: http://github.com/juaml/hipsnp/
 
 .. _`Wikipedia`: https://wikipedia.org
 
