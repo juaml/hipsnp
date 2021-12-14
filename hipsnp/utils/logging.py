@@ -12,7 +12,7 @@ import warnings
 logger = logging.getLogger('HIPSNP')
 
 _use_stacklevel = False
-if sys.version.info[0] == 3 and sys.version.info[1] >= 8:  # type: ignore
+if sys.version_info[0] == 3 and sys.version_info[1] >= 8:  # type: ignore
     _use_stacklevel = True
 
 
