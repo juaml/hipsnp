@@ -38,7 +38,7 @@ setuptools.setup(
         'Tracker': f'{DOWNLOAD_URL}issues/',
     },
     install_requires=['datalad>=0.14.0', 'pandas>=1.1.2',
-                      'numpy>=1.21.2', 'bgen_reader>=4.0.8'],
+                      'numpy>=1.16', 'bgen_reader>=4.0.8'],
     python_requires='>=3.6',
     use_scm_version=dict(
         version_scheme="python-simplified-semver",

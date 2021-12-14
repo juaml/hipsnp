@@ -11,7 +11,7 @@ hipsnp requires the following packages:
 
 datalad>=0.14.0
 pandas>=1.1.2
-numpy>=1.21.2
+numpy>=1.16
 bgen_reader>=4.0.8
 
 Additionally, hipsnp requires that QCTOOL is installed: 
