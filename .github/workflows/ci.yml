@@ -23,10 +23,7 @@ jobs:
         echo "SUDO=$SUDO" >> $GITHUB_ENV
     - name: Install QCTool
       run: |
-        bash -c "wget -q https://code.enkre.net/qctool/zip/release/qctool.tgz"
-        bash -c "tar xzf qctool.tgz"
-        bash -c "cd qctool && ./waf-1.5.18 configure && ./waf-1.5.18"
-        $SUDO bash -c "cp ./qctool/build/release/qctool_v2.0-release /usr/bin/qctool"
+        $SUDO ./install-qctool.sh
     - name: Install dependencies
       run: |
         $SUDO bash -c "$(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/main/install)"
