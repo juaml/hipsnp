@@ -26,7 +26,7 @@ jobs:
         $SUDO bash -c "$(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/main/install)"
         $SUDO bash -c "$(curl -fsSL https://git.io/Jz7Oa)" -s horta/elapsed || exit 1
         $SUDO bash -c "$(curl -fsSL https://git.io/Jz7Oa)" -s horta/almosthere || exit 1
-        $SUDO bash -c "$(curl -fsSL https://git.io/JerYI)" limix/bgen
+        $SUDO bash -c "$(curl -fsSL https://git.io/JerYI)" -s limix/bgen || exit 1
         python -m pip install --upgrade pip
         pip install -r test-requirements.txt
         pip install -r requirements.txt
