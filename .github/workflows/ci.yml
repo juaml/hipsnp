@@ -32,7 +32,7 @@ jobs:
         pip install -r requirements.txt
     - name: Install QCTool
       run: |
-        curl -fsSL https://code.enkre.net/qctool/zip/release/qctool.tgz
+        wget https://code.enkre.net/qctool/zip/release/qctool.tgz
         tar -xvzf qctool
         cd qctool
         ./waf-1.5.18 configure
