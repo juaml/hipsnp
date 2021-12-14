@@ -33,7 +33,7 @@ jobs:
     - name: Install QCTool
       run: |
         wget https://code.enkre.net/qctool/zip/release/qctool.tgz
-        tar -xvzf qctool
+        tar -xvzf qctool.tgz
         cd qctool
         ./waf-1.5.18 configure
         ./waf-1.5.18
