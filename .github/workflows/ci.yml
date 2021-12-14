@@ -25,7 +25,7 @@ jobs:
         $SUDO ./install-qctool.sh
     - name: Install dependencies
       run: |
-        $SUDO apt-get install git-annex-standalone
+        $SUDO apt-get install git-annex
         $SUDO bash -c "$(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/main/install)"
         $SUDO bash -c "$(curl -fsSL https://git.io/Jz7Oa)" -s horta/elapsed || exit 1
         $SUDO bash -c "$(curl -fsSL https://git.io/Jz7Oa)" -s horta/almosthere || exit 1
