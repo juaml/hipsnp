@@ -22,8 +22,9 @@ jobs:
         if type sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
         echo "SUDO=$SUDO" >> $GITHUB_ENV
     - name: Set up bgen installation
-      echo "GITHUB_USER=limix" >> $GITHUB_ENV
-      echo "GITHUB_PROJECT=bgen" >> $GITHUB_ENV
+      run: |
+        echo "GITHUB_USER=limix" >> $GITHUB_ENV
+        echo "GITHUB_PROJECT=bgen" >> $GITHUB_ENV
     - name: Install dependencies
       run: |
         $SUDO bash -c "$(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/main/install)"
