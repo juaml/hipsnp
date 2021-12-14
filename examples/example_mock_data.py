@@ -5,7 +5,7 @@ Obtain risk scores and alleles
 This example uses a mock dataset file with genotic information hosted in GIN.
 The alleles are extracted from the BGEN files and a risk score is calculated
 
-.. include:: ../../links.inc
+.. include:: ../links.inc
 """
 # # Authors: Oscar Portoles <o.portoles@fz-juelich.de>
 #            Federico Raimondo <f.raimondo@fz-juelich.de>
