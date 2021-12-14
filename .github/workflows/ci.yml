@@ -30,6 +30,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r test-requirements.txt
         pip install -r requirements.txt
+    - name: Install QCTool
+      run: |
+        curl -fsSL https://code.enkre.net/qctool/zip/release/qctool.tgz
+        tar -xvzf qctool
+        cd qctool
+        ./waf-1.5.18 configure
+        ./waf-1.5.18
+        $SUDO cp ./build/release/qctool_v2.0-release /usr/bin/qctool
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
