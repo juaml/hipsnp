@@ -21,6 +21,12 @@ jobs:
       run: |
         if type sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
         echo "SUDO=$SUDO" >> $GITHUB_ENV
+    - name: Install QCTool
+      run: |
+        bash -c "wget https://code.enkre.net/qctool/zip/release/qctool.tgz"
+        bash -c "tar -xvzf qctool.tgz"
+        bash -c "cd qctool && ./waf-1.5.18 configure && ./waf-1.5.18"
+        $SUDO cp ./build/release/qctool_v2.0-release /usr/bin/qctool
     - name: Install dependencies
       run: |
         $SUDO bash -c "$(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/main/install)"
@@ -30,12 +36,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r test-requirements.txt
         pip install -r requirements.txt
-    - name: Install QCTool
-      run: |
-        bash -c "wget https://code.enkre.net/qctool/zip/release/qctool.tgz"
-        bash -c "tar -xvzf qctool.tgz"
-        bash -c "cd qctool && ./waf-1.5.18 configure && ./waf-1.5.18"
-        $SUDO cp ./build/release/qctool_v2.0-release /usr/bin/qctool
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
