@@ -18,6 +18,11 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
+      - name: Check for sudo
+        shell: bash
+        run: |
+          if type sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
+          echo "SUDO=$SUDO" >> $GITHUB_ENV
       - name: Install QCTool
         run: |
           $SUDO ./install-qctool.sh

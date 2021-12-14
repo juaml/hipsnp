@@ -25,7 +25,7 @@ jobs:
         $SUDO ./install-qctool.sh
     - name: Install dependencies
       run: |
-        SUDO bash -c "$(curl -fsSL http://neuro.debian.net/_files/neurodebian-travis.sh)"
+        $SUDO bash -c "$(curl -fsSL http://neuro.debian.net/_files/neurodebian-travis.sh)"
         $SUDO apt-get update -qq
         $SUDO apt-get install git-annex-standalone
         $SUDO bash -c "$(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/main/install)"
