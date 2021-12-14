@@ -29,7 +29,7 @@ workdir = mkdtemp()
 ###############################################################################
 # Obtain a genotype from a datalad dataset. We can use the same directory
 # as work and data directory.
-source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # example data
+source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
 genotype = genotype_from_datalad(source, workdir=workdir, datadir=workdir)
 
 ###############################################################################

@@ -32,7 +32,7 @@ def test_validate_arguments_column_metadata(columns, isgood):
 def test_validate_arguments_rsids():
     "Force Exception that checks same rsids in metadata and probabilities"
 
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
         dataset.get()
@@ -73,7 +73,7 @@ def test_validate_arguments_rsids():
 
 def test_filter():
     """Test if the filtered out elements are not in the Gentype Object"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
     keep_rsids = ['RSID_2', 'RSID_3', 'RSID_4', 'RSID_5', 'RSID_6',
                   'RSID_7', 'RSID_8', 'RSID_9', 'RSID_10', 'RSID_11']
     n_keep_rsids = len(keep_rsids)
@@ -260,7 +260,7 @@ def test_filter():
 
 def test_consolidate():
     """Test consolidating a genotype"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
 
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
@@ -364,7 +364,7 @@ def test_consolidate():
 
 def test__consolidated_probabilities():
     """Test obtaining the consolidated probabilities"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
 
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
@@ -396,7 +396,7 @@ def test__consolidated_probabilities():
 
 def test_alleles_riskscore():
     """Test the alleles and riskscore method of the Genotype class"""
-    source = 'git@gin.g-node.org:/juaml/datalad-example-bgen'  # example data
+    source = 'https://gin.g-node.org/juaml/datalad-example-bgen.git'
 
     with tempfile.TemporaryDirectory() as tmpdir:
         dataset = dl.install(source=source, path=tmpdir + '/')  # type: ignore
