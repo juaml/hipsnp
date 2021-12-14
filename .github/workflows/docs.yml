@@ -18,9 +18,18 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
-
+      - name: Install QCTool
+        run: |
+          $SUDO ./install-qctool.sh
       - name: Install Dependencies
         run: |
+          $SUDO bash <(wget -q -O- http://neuro.debian.net/_files/neurodebian-travis.sh)
+          sudo apt-get update -qq
+          $SUDO apt-get install git-annex-standalone
+          $SUDO bash -c "$(curl -fsSL https://raw.githubusercontent.com/horta/zstd.install/main/install)"
+          $SUDO bash -c "$(curl -fsSL https://git.io/Jz7Oa)" -s horta/elapsed || exit 1
+          $SUDO bash -c "$(curl -fsSL https://git.io/Jz7Oa)" -s horta/almosthere || exit 1
+          $SUDO bash -c "$(curl -fsSL https://git.io/JerYI)" -s limix/bgen || exit 1
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r docs-requirements.txt
