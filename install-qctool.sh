@@ -1,7 +1,7 @@
 #!/bin/bash
 mkdir tmp
 cd tmp
-wget -q https://code.enkre.net/qctool/zip/release/qctool.tgz
+curl https://code.enkre.net/qctool/zip/release/qctool.tgz --output qctool.tgz
 tar xzf qctool.tgz
 cd qctool
 ./waf-1.5.18 configure
