@@ -1,17 +1,17 @@
 .. include:: links.inc
 
-Welcome to the documentation!
-=============================
+Welcome to hipsnp documentation!
+================================
 
-
-<<< Under development. There will be a release in the future >>>
-
+hipsnp is a library for the handling of SNP data, particularly aimed for the UK Biobank.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    installation
+   auto_examples/index.rst
+   api
    maintaining
    whats_new
 
