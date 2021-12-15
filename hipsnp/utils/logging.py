@@ -86,6 +86,7 @@ _logging_types = dict(DEBUG=logging.DEBUG, INFO=logging.INFO,
 def configure_logging(level='WARNING', fname=None, overwrite=None,
                       output_format=None):
     """Configure the logging functionality
+
     Parameters
     ----------
     level : int or string
@@ -101,10 +102,11 @@ def configure_logging(level='WARNING', fname=None, overwrite=None,
         but additionally raises a warning to notify the user that log
         entries will be appended.
     output_format : str
-        Format of the output messages. See the following for examples:
-            https://docs.python.org/dev/howto/logging.html
+        Format of the output messages. See the documentation of
+        https://docs.python.org/dev/howto/logging.html
         e.g., "%(asctime)s - %(levelname)s - %(message)s".
         Defaults to "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
     """
     _close_handlers(logger)
     if output_format is None:
@@ -143,6 +145,7 @@ def _close_handlers(logger):
 
 def raise_error(msg, klass=ValueError):
     """Raise an error, but first log it
+
     Parameters
     ----------
     msg : str
@@ -158,6 +161,7 @@ def raise_error(msg, klass=ValueError):
 
 def warn(msg, category=RuntimeWarning):
     """Warn, but first log it
+
     Parameters
     ----------
     msg : str

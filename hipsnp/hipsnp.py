@@ -21,8 +21,8 @@ class Genotype():
         Metadata of the genotype. The dataframe should contain the
         columns RSIDS (as index), CHROM, POS, ID and FORMAT.
         Each RSID should be unique and map one-to-one to a chromosome.
-    _probabilities: dict(str : tuple(np.array of size (n_samples),
-                                     np.array of size (n_samples, 3))))
+    _probabilities: dict(str : tuple(np.array of size (n_samples), \
+np.array of size (n_samples, 3))))
         Probabilities of each allele in each sample, for each chromosome.
         Each value is a tuple with the samples and a 2D numpy array with
         the probabilities of each allele in each sample
@@ -30,8 +30,8 @@ class Genotype():
     _consolidated: bool
         If consolidated, the object contains data in which all RSIDs have the
         same samples and in the same order.
-
     """
+
     def __init__(self, metadata, probabilities):
         """
         Genotype constructor
@@ -130,8 +130,8 @@ class Genotype():
         Genotype:
             The filtered genotype object.
 
-        Rasises
-        -------
+        Raises
+        ------
         ValueError
             If the filtered data is empty.
         """
@@ -270,14 +270,14 @@ class Genotype():
         found in all RSID, the sample is discarded.
 
         Parameters
-        ---------_
+        ----------
         inplace: bool
             If true, modifies the object in place (default). If false, returns
             a new object without modifying the original one.
 
         Returns
         -------
-        Genotype:
+        Genotype
             The consolidated genotype object.
 
         Raises
@@ -730,9 +730,10 @@ def get_chromosomes(rsids, chromosomes=None):
 
 
 def read_weights(fname, sep='\t'):
-    """Read weights from a CSV/TSV or PGS file
-    (see https://www.pgscatalog.org/downloads/#dl_ftp_scoring).
-    Table headersmust contain:
+    """Read weights from a CSV/TSV or PGS file (see
+    https://www.pgscatalog.org/downloads/#dl_ftp_scoring).
+
+    Table headers must contain:
         * `effect_allele` or `ea`
         * `effect_weight` or `weight`
         * `snpid` or `rsid`
@@ -750,8 +751,9 @@ def read_weights(fname, sep='\t'):
 
     Raises
     ------
-    ValueError If the file does not exist or the CSV does not contain required
-    fields.
+    ValueError
+        If the file does not exist or the CSV does not contain required
+        fields.
     """
 
     if isinstance(fname, str):
