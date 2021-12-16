@@ -832,7 +832,6 @@ def _find_chromosome_data(chr, datadir, subdir='imputation',
     files = list((datadir / subdir).glob(f'*_c{chr}_*'))
     got_files = []
     if datalad_source:
-        logger.info(f'Getting files: {files}')
         get_status = ds.get(files)  # type: ignore
         for f_val in get_status:
             status = f_val['status']
@@ -919,7 +918,6 @@ def genotype_from_datalad(
             warn(
                 f'Chromosome {t_chr} output file exists. '
                 'Skipping (set recompute=True to force generation)')
-            files_to_read.append(bgen_out)
             continue
 
         # get the data
