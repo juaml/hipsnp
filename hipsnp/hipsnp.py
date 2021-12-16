@@ -919,7 +919,7 @@ def genotype_from_datalad(
             warn(
                 f'Chromosome {t_chr} output file exists. '
                 'Skipping (set recompute=True to force generation)')
-            files_to_read.append(bgen_out)qq
+            files_to_read.append(bgen_out)
             continue
 
         # get the data
