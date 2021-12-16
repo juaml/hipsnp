@@ -404,30 +404,37 @@ def test_alleles_riskscore():
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
         gen = hps.read_bgen(files=bgenfile)
 
-    mock_meta = gen.metadata.loc[['RSID_2', 'RSID_3']]
-    mock_samples = gen.probabilities['RSID_2'][0][:2]
+    mock_meta = pd.DataFrame(data=np.array([['A', 'G', 'x', 'x', 'x', 'x'],
+                                            ['G', 'A', 'x', 'x', 'x', 'x']]),
+                             index=['RSID_2', 'RSID_3'],
+                             columns=['REF', 'ALT', 'CHROM',
+                                      'POS', 'ID', 'FORMAT'])
+    mock_samples = gen.probabilities['RSID_3'][0][:3]
     mock_prob = {
-        'RSID_2': (mock_samples, np.array([[0.25, 0.25, 0.5],
-                                           [0.5, 0.25, 0.25]])),
+        'RSID_2': (mock_samples, np.array([[0.25, 0.25, 0.50],
+                                           [0.50, 0.25, 0.25],
+                                           [0.25, 0.50, 0.25]])),
         'RSID_3': (mock_samples, np.array([[1.0, 0.0, 0.0],
-                                           [0.0, 1.0, 0.0]]))}
+                                           [0.0, 1.0, 0.0],
+                                           [0.0, 0.0, 1.0]]))}
 
     mockGen = hps.Genotype(mock_meta, mock_prob)
 
-    mock_g_012 = pd.DataFrame(data=np.array([[2, 0], [0, 1]]),
+    mock_g_012 = pd.DataFrame(data=np.array([[2, 0, 1], [0, 1, 2]]),
                               index=['RSID_2', 'RSID_3'],
                               columns=mock_samples)
 
-    mock_g_ale = pd.DataFrame(data=np.array([['GG', 'AA'], ['AA', 'AG']]),
+    mock_g_ale = pd.DataFrame(data=np.array([['GG', 'AA', 'AG'],
+                                             ['GG', 'AG', 'AA']]),
                               index=['RSID_2', 'RSID_3'],
                               columns=mock_samples)
 
-    mock_dosage = pd.DataFrame(data=np.array([[0.75, 1.25],
-                                              [2.0, 1.0]]),
+    mock_dosage = pd.DataFrame(data=np.array([[0.75, 1.25, 1.0],    # weight=1
+                                              [0.00, 1.00, 2.0]]),  # weight=2
                                index=['RSID_2', 'RSID_3'],
                                columns=mock_samples)
 
-    mock_risk = pd.DataFrame(data=np.array([4.75, 3.25]),
+    mock_risk = pd.DataFrame(data=np.array([0.75, 3.25, 5.0]),
                              index=mock_samples)
 
     data_path = hps.utils.testing.get_testing_data_dir()
@@ -441,7 +448,7 @@ def test_alleles_riskscore():
     assert_frame_equal(risk, mock_risk)
 
     # test 2: filter by rsid
-    mock_risk_filt_rs = np.array([[0.75], [1.25]])
+    mock_risk_filt_rs = np.array([[0.75], [1.25], [1.0]])
 
     g_ale, g_012 = mockGen.alleles(rsids='RSID_2')
     dosage, risk = mockGen.riskscores(rsids='RSID_2', weights=mock_w)
