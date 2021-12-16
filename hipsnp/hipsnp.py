@@ -2,6 +2,7 @@ import subprocess
 import requests
 import pandas as pd
 import numpy as np
+import time
 from datalad import api as datalad
 from bgen_reader import open_bgen
 from pathlib import Path
@@ -631,7 +632,7 @@ def read_bgen(files, verify_integrity=False):
     return Genotype._from_bgen(files, verify_integrity)
 
 
-def get_chromosomes_from_ensembl(rsids):
+def get_chromosomes_from_ensembl(rsids, max_retries=5):
     """Make a REST call to ensembl.org and return a JSON object with
     the information of the variant of given a rsid
 
@@ -661,11 +662,23 @@ def get_chromosomes_from_ensembl(rsids):
 
     chromosomes = []
     for rsid in rsids:
+        logger.info(f'Getting chromosome for {rsid} from ensembl.org')
         t_chromosome = None
         url = (f'http://rest.ensembl.org/variation/human/{rsid}'
                '?content-type=application/json')
-        response = requests.get(url)
-        json_dict = response.json()
+        ok = False
+        while ok is False and max_retries > 0:
+            response = requests.get(url)
+            if response.ok is True:
+                ok = True
+            else:
+                warn(f'ensembl.org replied with {response.status_code}. '
+                     'Waiting 1 second and retrying.')
+                max_retries -= 1
+                time.sleep(1)
+        if max_retries == 0 and ok is False:
+            raise_error('Could not get the rsid information from ensembl.org')
+        json_dict = response.json()  # type: ignore
         if 'error' in json_dict:
             raise_error(
                 'Error getting the chromosomes from ensembl.org: '
