@@ -404,7 +404,6 @@ def test_alleles_riskscore():
         bgenfile = tmpdir + '/imputation/example_c1_v0.bgen'
         gen = hps.read_bgen(files=bgenfile)
 
-    # mock_meta = gen.metadata.loc[['RSID_2', 'RSID_3']]
     mock_meta = pd.DataFrame(data=np.array([['A', 'G', 'x', 'x', 'x', 'x'],
                                             ['G', 'A', 'x', 'x', 'x', 'x']]),
                              index=['RSID_2', 'RSID_3'],
