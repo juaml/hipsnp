@@ -443,7 +443,8 @@ np.array of size (n_samples, 3))))
             DataFrame with riskscores by samples
         """
 
-        weights = read_weights(weights)
+        if not isinstance(weights, pd.DataFrame):
+            weights = read_weights(weights)
 
         if rsids is not None or samples is not None or weights is not None:
             gen_filt = self.filter(
@@ -452,6 +453,8 @@ np.array of size (n_samples, 3))))
             gen_filt = self._clone()
 
         if not gen_filt.is_consolidated:
+            logger.info(
+                'Samples are not consolidated across RSIDs. Consolidating...')
             gen_filt.consolidate(inplace=True)
 
         # sort all DataFrames by the RSIDS in gen_filt.probabilities
@@ -541,7 +544,7 @@ np.array of size (n_samples, 3))))
 
                 # find duplicates with previous files
                 if (metadata is not None and
-                        np.sum(metadata.index == bgen.rsids) != 0):
+                        any(x in metadata.index for x in bgen.rsids)):
                     warn(f'Files have duplicated RSIDs')
                     # indexes with rsids not previously taken
                     # to keep unique RSIDS
