@@ -1,6 +1,6 @@
 .. NOTE: we are now using links to highlight new functions and classes.
    Please follow the examples below like 
-   :func:`julearn.api.run_cross_validation`, so the
+   :func:`hipsnp.hipsnp.read_bgen`, so the
    whats_new page will have a link to the function/class documentation.
 
 .. NOTE: there are 3 separate sections for changes, based on type:
@@ -10,13 +10,11 @@
 
 .. _current:
 
-Current (0.0.0.dev)
+Current (0.0.3.dev)
 -------------------
 
 Enhancements
 ~~~~~~~~~~~~
-
-- Created a the repository based on the mockup by by `Fede Raimondo`_.
 
 Bugs
 ~~~~
