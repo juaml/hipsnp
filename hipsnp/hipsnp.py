@@ -682,7 +682,7 @@ def get_chromosomes_from_ensembl(rsids, max_retries=5):
             else:
                 if response.status_code == 304:
                     warn(f'ensembl.org replied with {response.status_code}. '
-                        'Waiting 1 second and retrying.')
+                         'Waiting 1 second and retrying.')
                     max_retries -= 1
                     time.sleep(1)
                 else:
