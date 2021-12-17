@@ -680,10 +680,17 @@ def get_chromosomes_from_ensembl(rsids, max_retries=5):
             if response.ok is True:
                 ok = True
             else:
-                warn(f'ensembl.org replied with {response.status_code}. '
-                     'Waiting 1 second and retrying.')
-                max_retries -= 1
-                time.sleep(1)
+                if response.status_code == 304:
+                    warn(f'ensembl.org replied with {response.status_code}. '
+                        'Waiting 1 second and retrying.')
+                    max_retries -= 1
+                    time.sleep(1)
+                else:
+                    json_dict = response.json()
+                    error = json_dict.get('error', 'Uknownw')
+                    raise_error(
+                        f'ensembl.org replied with {response.status_code}. '
+                        f'Error: {error}')
         if max_retries == 0 and ok is False:
             raise_error('Could not get the rsid information from ensembl.org')
         json_dict = response.json()  # type: ignore
