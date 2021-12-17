@@ -2,6 +2,7 @@ import subprocess
 import requests
 import pandas as pd
 import numpy as np
+import time
 from datalad import api as datalad
 from bgen_reader import open_bgen
 from pathlib import Path
@@ -442,7 +443,8 @@ np.array of size (n_samples, 3))))
             DataFrame with riskscores by samples
         """
 
-        weights = read_weights(weights)
+        if not isinstance(weights, pd.DataFrame):
+            weights = read_weights(weights)
 
         if rsids is not None or samples is not None or weights is not None:
             gen_filt = self.filter(
@@ -451,6 +453,8 @@ np.array of size (n_samples, 3))))
             gen_filt = self._clone()
 
         if not gen_filt.is_consolidated:
+            logger.info(
+                'Samples are not consolidated across RSIDs. Consolidating...')
             gen_filt.consolidate(inplace=True)
 
         # sort all DataFrames by the RSIDS in gen_filt.probabilities
@@ -540,7 +544,7 @@ np.array of size (n_samples, 3))))
 
                 # find duplicates with previous files
                 if (metadata is not None and
-                        np.sum(metadata.index == bgen.rsids) != 0):
+                        any(x in metadata.index for x in bgen.rsids)):
                     warn(f'Files have duplicated RSIDs')
                     # indexes with rsids not previously taken
                     # to keep unique RSIDS
@@ -631,7 +635,10 @@ def read_bgen(files, verify_integrity=False):
     return Genotype._from_bgen(files, verify_integrity)
 
 
-def get_chromosomes_from_ensembl(rsids):
+_valid_chromosomes = [f'{x}' for x in range(1, 23)] + ['X', 'Y']
+
+
+def get_chromosomes_from_ensembl(rsids, max_retries=5):
     """Make a REST call to ensembl.org and return a JSON object with
     the information of the variant of given a rsid
 
@@ -659,22 +666,47 @@ def get_chromosomes_from_ensembl(rsids):
     if not all([rsid.startswith('rs') for rsid in rsids]):
         raise_error('rsids must start with "rs"')
 
+    logger.info('Getting list from chromosomes from ensembl.org')
     chromosomes = []
     for rsid in rsids:
+        logger.info(f'Getting chromosome for {rsid} from ensembl.org')
         t_chromosome = None
         url = (f'http://rest.ensembl.org/variation/human/{rsid}'
                '?content-type=application/json')
-        response = requests.get(url)
-        json_dict = response.json()
+        ok = False
+        response = None
+        while ok is False and max_retries > 0:
+            response = requests.get(url)
+            if response.ok is True:
+                ok = True
+            else:
+                if response.status_code == 304:
+                    warn(f'ensembl.org replied with {response.status_code}. '
+                         'Waiting 1 second and retrying.')
+                    max_retries -= 1
+                    time.sleep(1)
+                else:
+                    json_dict = response.json()
+                    error = json_dict.get('error', 'Uknownw')
+                    raise_error(
+                        f'ensembl.org replied with {response.status_code}. '
+                        f'Error: {error}')
+        if max_retries == 0 and ok is False:
+            raise_error('Could not get the rsid information from ensembl.org')
+        json_dict = response.json()  # type: ignore
         if 'error' in json_dict:
             raise_error(
                 'Error getting the chromosomes from ensembl.org: '
                 f'{json_dict["error"]}')
         mappings = json_dict['mappings']
         for mapping in mappings:
-            if mapping['ancestral_allele'] is not None:
-                t_chromosome = mapping['seq_region_name']
-                break
+            t_chromosome = mapping['seq_region_name']
+            break
+
+        if t_chromosome is None:
+            raise_error(f'Chromosome for {rsid} not found')
+        if t_chromosome not in _valid_chromosomes:
+            raise_error(f'Chromosome {t_chromosome} not valid')
         chromosomes.append(t_chromosome)
 
     return chromosomes
@@ -916,11 +948,17 @@ def genotype_from_datalad(
         logger.info(f'Getting chromosome {t_chr} for RSID(s) {t_rsid}')
 
         if recompute is False and bgen_out.is_file():
-            warn(
-                f'Chromosome {t_chr} output file exists. '
-                'Skipping (set recompute=True to force generation)')
-            files_to_read.append(bgen_out)
-            continue
+            prev_rsid = pd.read_csv(rsid_out, sep='\t', header=None)
+            all_in = np.isin(t_rsid, prev_rsid.values)
+            if all_in.all():
+                logger.info(f'RSID(s) {t_rsid} already in {bgen_out}')
+                files_to_read.append(bgen_out)
+                continue
+            else:
+                raise_error(
+                    f'Chromosome {t_chr} output file exists but does '
+                    'not contain all the RSIDs required. '
+                    'Set recompute=True to force generation of new files.')
 
         # get the data
         files, ds, got_files = _find_chromosome_data(
