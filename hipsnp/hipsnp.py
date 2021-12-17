@@ -948,7 +948,8 @@ def genotype_from_datalad(
         logger.info(f'Getting chromosome {t_chr} for RSID(s) {t_rsid}')
 
         if recompute is False and bgen_out.is_file():
-            prev_rsid = pd.read_csv(rsid_out, sep='\t', header=None)
+            prev_rsid = pd.read_csv(
+                rsid_out, sep='\t', header=None)  # type: ignore
             all_in = np.isin(t_rsid, prev_rsid.values)
             if all_in.all():
                 logger.info(f'RSID(s) {t_rsid} already in {bgen_out}')

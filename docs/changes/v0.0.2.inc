@@ -8,13 +8,15 @@
    - "Bugs" for bug fixes
    - "API changes" for backward-incompatible changes
 
-.. _current:
+.. _v0.0.2:
 
-Current (0.0.3.dev)
--------------------
+0.0.2
+-----
 
 Enhancements
 ~~~~~~~~~~~~
+
+- First public release `Fede Raimondo`_.
 
 Bugs
 ~~~~
