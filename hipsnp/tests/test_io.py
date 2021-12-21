@@ -75,7 +75,8 @@ def test_get_chromosomes():
         hps.get_chromosomes_from_ensembl(rsidsFail)
 
     rsidsFail = ['rs699132213']
-    with pytest.raises(ValueError, match='rs699132213 not found for human'):
+    with pytest.raises(ValueError,
+                       match="Could not get rsids"):
         hps.get_chromosomes_from_ensembl(rsidsFail)
 
     data_path = hps.utils.testing.get_testing_data_dir()

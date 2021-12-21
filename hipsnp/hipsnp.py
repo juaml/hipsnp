@@ -667,39 +667,46 @@ def get_chromosomes_from_ensembl(rsids, max_retries=5):
         raise_error('rsids must start with "rs"')
 
     logger.info('Getting list from chromosomes from ensembl.org')
-    chromosomes = []
-    for rsid in rsids:
-        logger.info(f'Getting chromosome for {rsid} from ensembl.org')
-        t_chromosome = None
-        url = (f'http://rest.ensembl.org/variation/human/{rsid}'
-               '?content-type=application/json')
-        ok = False
-        response = None
-        while ok is False and max_retries > 0:
-            response = requests.get(url)
-            if response.ok is True:
-                ok = True
+
+    server = "https://rest.ensembl.org"
+    ext = "/variation/homo_sapiens"
+    headers = { "Content-Type": "application/json",
+                "Accept": "application/json"}
+    data = {"ids": rsids}
+    ok = False
+    response = None
+
+    while ok is False and max_retries > 0:
+        response = requests.post(f'{server}{ext}', headers=headers, json=data)
+        if response.ok is True:
+            ok = True
+        else:
+            if response.status_code == 304:
+                warn(f'ensembl.org replied with {response.status_code}. '
+                     f'Waiting 1 second and retrying.')
+                max_retries -= 1
+                time.sleep(1)
             else:
-                if response.status_code == 304:
-                    warn(f'ensembl.org replied with {response.status_code}. '
-                         'Waiting 1 second and retrying.')
-                    max_retries -= 1
-                    time.sleep(1)
-                else:
-                    json_dict = response.json()
-                    error = json_dict.get('error', 'Uknownw')
-                    raise_error(
-                        f'ensembl.org replied with {response.status_code}. '
-                        f'Error: {error}')
-        if max_retries == 0 and ok is False:
-            raise_error('Could not get the rsid information from ensembl.org')
-        json_dict = response.json()  # type: ignore
-        if 'error' in json_dict:
+                raise_error(
+                    f'ensembl.org replied with {response.status_code}. '
+                    f'Error: {response.reason}')
+
+    if max_retries == 0 and ok is False:
+        raise_error('Could not get the rsid information from ensembl.org')
+    
+    dict_of_json = response.json()
+
+    if len(rsids) != len(dict_of_json.keys()):
+        missing = [rsid for rsid in rsids if rsid not in dict_of_json.keys()]
+        raise_error(f'Could not get rsids {missing} from ensembl.org')
+
+    chromosomes = []
+    for rsid, json_val in dict_of_json.items():  # type: ignore
+        if 'error' in json_val:
             raise_error(
                 'Error getting the chromosomes from ensembl.org: '
-                f'{json_dict["error"]}')
-        mappings = json_dict['mappings']
-        for mapping in mappings:
+                f'{json_val["error"]}')
+        for mapping in json_val['mappings']:
             t_chromosome = mapping['seq_region_name']
             break
 
@@ -895,7 +902,7 @@ def genotype_from_datalad(
         list of RSIDs to be included in the genotype
     workdir : str
         Path to save bgen and CSV files.
-    datadir : str, optional
+    datadir : str
         Path to the datalad dataset or directory with the chromosome files.
     chromosomes : list of str | None
         Chromosomes to process. If None (default), use all chromosomes and get
