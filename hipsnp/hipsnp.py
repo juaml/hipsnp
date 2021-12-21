@@ -1,4 +1,5 @@
 import subprocess
+from numpy.lib.arraysetops import unique
 import requests
 import pandas as pd
 import numpy as np
@@ -206,7 +207,8 @@ np.array of size (n_samples, 3))))
 
         reamining_rsids = list(probs_filtered.keys())
         if len(reamining_rsids) == 0:
-            raise_error(f'No samples matching filter specifications')
+            raise_error(f'The Genotype object does not contain samples'
+                        f'matching the filter specifications')
 
         # Filter metadata to keep only rsids with samples
         meta_filtered = self.metadata.filter(items=reamining_rsids, axis=0)
@@ -252,7 +254,8 @@ np.array of size (n_samples, 3))))
 
         meta_filtered = self.metadata.filter(items=rsids, axis=0)
         if meta_filtered.empty:
-            raise_error(f'No RSIDs matching filter specifications')
+            raise_error(f'The Genotype object does not contain RSIDS matching '
+                        f'filter specifications')
 
         probs_filtered = {k_rsid: self.probabilities[k_rsid]
                           for k_rsid in rsids if k_rsid in self.rsids}
@@ -327,7 +330,7 @@ np.array of size (n_samples, 3))))
         if not self.is_consolidated:
             raise_error(
                 'Samples are not consolidated across RSIDs. '
-                'Execute `consolidate` first.')
+                'Execute `consolidate()` first.')
 
         uniq_samples = self.probabilities[self.rsids[0]][0]
         return uniq_samples
@@ -345,7 +348,7 @@ np.array of size (n_samples, 3))))
         """
         if not self.is_consolidated:
             raise_error('Samples are not consolidated across RSIDs. '
-                        'Execute `consolidate` first.')
+                        'Execute `consolidate()` first.')
 
         n_rsids = len(self.probabilities)
         n_samples = len(self._consolidated_samples())
@@ -519,10 +522,12 @@ np.array of size (n_samples, 3))))
             files = [files]
 
         if len(files) != len(set(files)):
-            raise_error("There are duplicated bgen files")
+            unique_f, count_f = np.unique(files, return_counts=True)
+            raise_error(f"The .bgen files {list(unique_f[count_f>1])} are"
+                        f"repeated. Remove duplicated files")
         # make sure that files exist
         if not all([Path(f).is_file() for f in files]):
-            raise_error('bgen file does not exist', FileNotFoundError)
+            raise_error('.bgen file does not exist', FileNotFoundError)
 
         # read all the files
         logger.info(f'Reading {len(files)} bgen files...')
@@ -608,7 +613,9 @@ np.array of size (n_samples, 3))))
         """
         if sum((col in ['REF', 'ALT', 'CHROM', 'POS', 'ID', 'FORMAT']
                 for col in meta.columns)) < 6:
-            raise_error("Missing columns in metadata")
+            raise_error("Missing column headers in metadata. At least headers"
+                        "'REF', 'ALT', 'CHROM', 'POS', 'ID', and 'FORMAT'"
+                        "should exist")
         if sorted(meta.index) != sorted(prob.keys()):
             raise_error("Mismatch of RSIDs between metadata and probabilities")
         if any([len(prob[k_key][0]) != prob[k_key][1].shape[0] or
@@ -792,7 +799,8 @@ def read_weights(fname, sep='\t'):
         fname = Path(fname)
 
     if not fname.exists():
-        raise_error(f'File {fname.as_posix()} does not exist')
+        raise_error(f'File {fname.as_posix()} does not exist. Provide an '
+                    f'existing file with weights')
 
     weights = pd.read_csv(
         fname, sep=sep, comment='#',
@@ -806,7 +814,10 @@ def read_weights(fname, sep='\t'):
     weights.set_index('rsid', inplace=True)
 
     if 'ea' not in weights.columns or 'weight' not in weights.columns:
-        raise_error(f'File {fname.as_posix()} contains wrong column names')
+        raise_error(f'File {fname.as_posix()} contains wrong column headers.'
+                    f'Headres `effect_allele` or `ea`, ',
+                    f'`effect_weight` or `weight`, and'
+                    f'`effect_weight` or `weight` are requred')
 
     duplicated = weights.index.duplicated(keep='first')
     if np.any(duplicated):
@@ -816,8 +827,10 @@ def read_weights(fname, sep='\t'):
 
     valid_alleles = ['A', 'C', 'G', 'T']
     if not np.isin(weights['ea'], valid_alleles).all():
+        wrong_rsid_idx = np.isin(weights['ea'], valid_alleles, invert=True)
         raise_error(
-            'Effect allele in weights file are not valid. '
+            f'Effect allele in weights file are not valid for rsids:\
+             {weights.index[wrong_rsid_idx].to_list()}'
             f'Only the following values are possible: {valid_alleles}')
 
     return weights
