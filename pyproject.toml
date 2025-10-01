@@ -3,7 +3,51 @@ requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-version_scheme = "python-simplified-semver"
+version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
 write_to = "hipsnp/_version.py"
 write_to_template = "__version__ = '{version}'\n"
+
+
+[project]
+name = "hipsnp"
+description = "JUelich NeuroImaging FEature extractoR"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "AGPL-3.0-only"}
+authors = [
+    { name = "Fede Raimondo", email = "f.raimondo@fz-juelich.de" },
+    { name = "Kaustubh Patil", email = "k.patil@fz-juelich.de" },
+]
+maintainers = [
+    { name = "Fede Raimondo", email = "f.raimondo@fz-juelich.de" },
+    { name = "Kaustubh Patil", email = "k.patil@fz-juelich.de" },
+]
+keywords = [
+    "snp",
+]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved",
+    "Programming Language :: Python",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "datalad>=1.0.0,<1.2.0",
+    "pandas>=2.0.0,<2.3.0",
+    "numpy>=1.24.0,<1.26.0",
+    "bgen_reader>=4.0.8",
+]
+dynamic = ["version"]
+
+[project.urls]
+Documentation = "https://juaml.github.io/hipsnp"
+Homepage = "https://juaml.github.io/hipsnp"
+Source = "https://github.com/juaml/hipsnp"
