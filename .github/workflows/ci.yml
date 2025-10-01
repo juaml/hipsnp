@@ -50,5 +50,5 @@ jobs:
       run: |
         PYTHONPATH="." pytest --cov=hipsnp --cov-report xml -vv hipsnp/
     - name: 'Upload coverage to CodeCov'
-      uses: codecov/codecov-action@master
-      if: success() && matrix.python-version == 3.8
+      uses: codecov/codecov-action@main
+      if: success() && matrix.python-version == 3.11
